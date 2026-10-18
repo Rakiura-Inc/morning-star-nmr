@@ -1,13 +1,13 @@
-# Local testing before anything is published.
-#   make local      create .venv, install this package (editable) and the Rakiura helper if it is
-#                   next door, then open Jupyter Lab on the notebooks
+# Local testing.
+#   make local      create .venv, install this package (editable) and the Rakiura helper, then open
+#                   Jupyter Lab on the notebooks
 #   make test       run the tests
 #   make run        execute every notebook headless (blank answers) into notebooks/executed/
 
 PYTHON ?= python3
 VENV ?= .venv
-# The notebook helper is not on PyPI yet. Point this at its folder (it is optional).
-RAKIURA_PY ?= ../rakiura-labs-platform/tools/rakiura-py
+# The Rakiura notebook helper (optional). Set RAKIURA_HELPER to a local checkout to use that instead.
+RAKIURA_HELPER ?= rakiura @ git+https://github.com/Rakiura-Inc/rakiura-py@main
 BIN := $(VENV)/bin
 
 .PHONY: local venv install test run manifests clean
@@ -21,11 +21,8 @@ venv:
 
 install: venv
 	$(BIN)/pip install -q -e ".[dev,notebooks,explore]"
-	@if [ -d "$(RAKIURA_PY)" ]; then \
-		$(BIN)/pip install -q -e "$(RAKIURA_PY)" && echo "Installed the Rakiura helper from $(RAKIURA_PY)"; \
-	else \
-		echo "Rakiura helper not found at $(RAKIURA_PY): notebooks run in offline mode (set RAKIURA_PY=...)"; \
-	fi
+	@$(BIN)/pip install -q "$(RAKIURA_HELPER)" && echo "Installed the Rakiura helper." \
+		|| echo "Could not install the Rakiura helper, so the notebooks run in offline mode."
 
 test: install
 	$(BIN)/python -m pytest -q

@@ -16,6 +16,7 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: pip install -e ".[dev]"
+      - run: pip install "rakiura @ git+https://github.com/Rakiura-Inc/rakiura-py@main"
       - run: python -m pytest -q
   notebooks:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'

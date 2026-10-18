@@ -1,7 +1,11 @@
 """Bridge to the Rakiura notebook helper (`rakiura`), with a local offline mode.
 
-When the real helper is installed and can sign in without a prompt, the calls below go to the
-portal exactly as the helper documents:
+The helper is installed by each notebook's setup cell:
+
+    %pip install -q "rakiura @ git+https://github.com/Rakiura-Inc/rakiura-py@main"
+
+When it is installed and the member is signed in, the calls below go to the portal exactly as
+the helper documents:
 
     rakiura.start(notebook=..., repo=...)   opens a run (notebook path, repository, commit, where)
     rakiura.done(part, figures, numbers)    ticks the checklist item the PI linked to that part
@@ -45,12 +49,16 @@ class _State:
 state = _State()
 
 
+_HELPER_CALLS = ("start", "done", "stage_text", "submit")
+
+
 def _import_helper():
+    """The Rakiura helper when it is installed, else None (any other package named rakiura is ignored)."""
     try:
         import rakiura  # type: ignore
-        return rakiura
-    except ImportError:
+    except Exception:
         return None
+    return rakiura if all(callable(getattr(rakiura, name, None)) for name in _HELPER_CALLS) else None
 
 
 def _key_without_click(helper) -> bool:

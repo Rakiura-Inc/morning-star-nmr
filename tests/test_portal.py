@@ -75,6 +75,24 @@ def test_replication_row_matches_the_schema():
     assert row["verdict"] == "degrades" and row["acid_wt_pct"] == 98 and row["contributor"] == "Rakiura member"
 
 
+def test_every_setup_cell_installs_the_helper_from_github():
+    import glob
+    here = os.path.dirname(__file__)
+    line = '%pip install -q "rakiura @ git+https://github.com/Rakiura-Inc/rakiura-py@main"'
+    for path in sorted(glob.glob(os.path.join(here, "..", "notebooks", "[0-9][0-9]_*.ipynb"))):
+        setup = "".join(json.load(open(path))["cells"][1]["source"])
+        assert line in setup and "morning-star-nmr@main" in setup, path
+
+
+def test_another_package_named_rakiura_is_not_used(monkeypatch, capsys):
+    import sys
+    import types
+    monkeypatch.setitem(sys.modules, "rakiura", types.ModuleType("rakiura"))
+    monkeypatch.setenv("RAKIURA_LIVE", "1")
+    assert nt.portal._import_helper() is None
+    assert nt.portal.connect("nb.ipynb") == "offline"
+
+
 # --- live mode through the real helper ---------------------------------------------------------
 
 rakiura = pytest.importorskip("rakiura", reason="the Rakiura helper is not installed (see README)")

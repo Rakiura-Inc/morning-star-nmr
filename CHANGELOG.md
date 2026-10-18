@@ -1,6 +1,8 @@
 # Changelog
 
 ## 0.1.0 (2026-10-18, not published)
+- Each notebook's setup cell installs the Rakiura helper from GitHub
+  (`Rakiura-Inc/rakiura-py`), so a member can connect in Colab; `make local` installs it too.
 - Every question is scaffolded: a What you need cell (facts, a figure or table, the matching step by
   name), a RECORD YOUR ANSWER box with fold-out hints, and a comment on each line to fill in.
 - Predictions are judged against the typical ranges the notebook teaches, never against this

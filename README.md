@@ -47,9 +47,10 @@ cd morning-star-nmr
 make local          # creates .venv, installs nmrtrain (editable) and the Rakiura helper, opens Jupyter Lab
 ```
 
-`make local` installs the Rakiura notebook helper from `../rakiura-labs-platform/tools/rakiura-py`
-when that folder exists (override with `make local RAKIURA_PY=/path/to/rakiura-py`). Without it the
-notebooks run in offline mode. Other targets:
+`make local` installs the Rakiura notebook helper from
+[Rakiura-Inc/rakiura-py](https://github.com/Rakiura-Inc/rakiura-py) (use a local checkout with
+`make local RAKIURA_HELPER=/path/to/rakiura-py`). If it cannot be installed, the notebooks run in
+offline mode. Other targets:
 
 ```sh
 make test           # pytest (about 10 s; no network)
@@ -60,7 +61,7 @@ Without make:
 
 ```sh
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev,notebooks,explore]"
-.venv/bin/pip install -e ../rakiura-labs-platform/tools/rakiura-py     # optional: the Rakiura helper
+.venv/bin/pip install "rakiura @ git+https://github.com/Rakiura-Inc/rakiura-py@main"   # optional: the Rakiura helper
 .venv/bin/jupyter lab notebooks
 ```
 
@@ -79,17 +80,23 @@ MB, cached), and to `NMRTRAIN_MIRROR` (a base URL serving the inner zips) when o
 
 ## Colab
 
-The badges above open each notebook from GitHub. The setup cell installs the package with
-`%pip install "nmrtrain @ git+https://github.com/Rakiura-Inc/morning-star-nmr@main"` (about 30 s);
-pin it to a release commit with `scripts/set_repo.py OWNER/NAME --pin <sha>`. In Colab the
-Rakiura helper is not installed (it is not public yet), so notebooks run in offline mode and
-members attach the files from `handin/` on the step page. Once the helper is public, add its
-install to the setup cell; a member then connects with one click (or a `RAKIURA_KEY` secret).
+The badges above open each notebook from GitHub. The setup cell installs the package and the
+Rakiura helper (about 30 s):
+
+```python
+%pip install -q "nmrtrain @ git+https://github.com/Rakiura-Inc/morning-star-nmr@main"
+%pip install -q "rakiura @ git+https://github.com/Rakiura-Inc/rakiura-py@main"
+```
+
+Pin `nmrtrain` to a release commit with `scripts/set_repo.py OWNER/NAME --pin <sha>`. A member
+connects with `nt.portal.go_live()` and one click on Allow, again in each new Colab session (or
+adds a `RAKIURA_KEY` secret in Colab's Secrets panel). Not connected, the notebook runs in offline
+mode and members attach the files from `handin/` on the step page.
 
 ## Connecting to Rakiura
 
-`nmrtrain.portal` uses the Rakiura helper (`rakiura`, in `tools/rakiura-py` of the portal repo)
-when it is installed. When it is not, offline mode makes the same calls locally.
+`nmrtrain.portal` uses the Rakiura helper
+([`rakiura`](https://github.com/Rakiura-Inc/rakiura-py)) when it is installed. When it is not, offline mode makes the same calls locally.
 
 | Call in the notebook | Live (helper installed and connected) | Offline |
 |---|---|---|
