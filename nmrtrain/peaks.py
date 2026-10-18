@@ -84,3 +84,15 @@ def similarity(a: Spectrum, b: Spectrum, lo: float = 1.0, hi: float = 6.5) -> fl
     order = np.argsort(a.ppm)
     ya = np.interp(b.ppm[m], a.ppm[order], a.y[order])
     return float(np.corrcoef(ya, b.y[m])[0, 1])
+
+
+def share(s: Spectrum, window: tuple, region: tuple = (1.5, 5.45), skip: tuple | None = None) -> float:
+    """One signal's area (window, in ppm) as a share of all the area in `region` (by default the
+    hydrogens on carbon of these peptides), leaving out `skip` (for example the NH signals).
+    Compares within one spectrum, since these samples carry no added reference compound."""
+    total = area(s, *region)
+    if skip:
+        lo, hi = max(region[0], skip[0]), min(region[1], skip[1])
+        if lo < hi:
+            total -= area(s, lo, hi)
+    return max(area(s, *window) / total, 0.0) if total > 0 else 0.0

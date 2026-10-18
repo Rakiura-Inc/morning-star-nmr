@@ -17,5 +17,54 @@
    "call": "survives",
    "call_source": "the published finding (Petkowski et al. 2024, Sci. Rep. 14, 17083)"
   }
+ },
+ "prediction": {
+  "carbonyl_ppm": {
+   "label": "carbonyl (C=O)",
+   "typical": [
+    160,
+    185
+   ],
+   "typical_text": "a carbonyl between about 160 and 185 ppm"
+  },
+  "alpha_ppm": {
+   "label": "alpha carbon (the backbone carbon next to the nitrogen)",
+   "typical": [
+    30,
+    65
+   ],
+   "typical_text": "a carbon bonded to nitrogen between about 30 and 65 ppm"
+  },
+  "methyl_ppm": {
+   "label": "Ala-Ala methyl carbon (CH3)",
+   "typical": [
+    10,
+    30
+   ],
+   "typical_text": "a methyl carbon between about 10 and 30 ppm"
+  }
+ },
+ "reading": {
+  "carbonyl_ppm": {
+   "label": "Ala-Ala carbonyls at 1 day",
+   "band": [
+    168,
+    180
+   ]
+  },
+  "alpha_ppm": {
+   "label": "Ala-Ala alpha carbons at 1 day",
+   "band": [
+    40,
+    55
+   ]
+  },
+  "methyl_ppm": {
+   "label": "Ala-Ala methyl carbon at 1 day",
+   "band": [
+    12,
+    20
+   ]
+  }
  }
 }

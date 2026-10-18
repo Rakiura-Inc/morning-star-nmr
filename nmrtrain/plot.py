@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.patches import Ellipse
 
 from .io import Spectrum
 from .peaks import region_max
@@ -85,10 +86,11 @@ def explore(spectra: list[Spectrum], lo: float = 0.0, hi: float = 13.0, norm=(1.
     return fig
 
 
-def draw_dipeptide(ax, residue: str, title: str, mark: dict | None = None) -> None:
+def draw_dipeptide(ax, residue: str, title: str, mark: dict | None = None, circle: dict | None = None) -> None:
     """Skeletal drawing of a protonated dipeptide. residue: "Ala" or "Gly".
     mark: optional {atom: (letter, colour)} to highlight proton environments
-    (atoms: S1, S2 = methyls; A1, A2 = alpha carbons)."""
+    (atoms: S1, S2 = methyls; A1, A2 = alpha carbons; C1, C2 = carbonyl carbons).
+    circle: optional {atom: number}: a ring round each group of hydrogens on carbon, numbered."""
     alpha = r"CH" if residue == "Ala" else r"CH$_2$"
     atoms = {"N1": (0.0, 0.0, r"H$_3$N$^+$"), "A1": (1.3, 0.6, alpha), "C1": (2.6, 0.0, "C"),
              "O1": (2.6, -1.1, "O"), "N2": (3.9, 0.6, "NH"), "A2": (5.2, 0.0, alpha),
@@ -111,6 +113,10 @@ def draw_dipeptide(ax, residue: str, title: str, mark: dict | None = None) -> No
             ax.text(x + 0.35, y + 0.32, mark[name][0], fontsize=11, weight="bold", color="0.1", zorder=3)
         ax.text(x, y, label, ha="center", va="center", fontsize=12, zorder=2,
                 bbox=dict(boxstyle="round,pad=0.25", fc=face, ec="none"))
+    for name, number in (circle or {}).items():
+        x, y, _ = atoms[name]
+        ax.add_patch(Ellipse((x, y), 1.15, 0.85, fill=False, ec="#E8590C", lw=1.8, zorder=4))
+        ax.text(x - 0.62, y + 0.42, str(number), fontsize=11, weight="bold", color="#E8590C", zorder=5)
     ax.set_title(title, fontsize=12)
     ax.set_xlim(-0.8, 8.6)
     ax.set_ylim(-1.7, 2.3)

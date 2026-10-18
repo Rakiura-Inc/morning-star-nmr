@@ -114,7 +114,7 @@ def test_slips_get_targeted_feedback():
     assert "acid's own signal" in text
     assert "mirror image 4.20" in text
     assert "3.10 test methyl is the one that goes" in text
-    assert "NH and OH protons exchange" in text
+    assert "swap with the acid's deuterium" in text
     assert "You could also cite 4.20 as new" in text and "6.00" not in text
 
 
@@ -146,14 +146,72 @@ def test_feedback_never_grades():
                 assert not GRADING.search(f.text.replace("(81%)", "").replace("(98%)", "")), f.text
 
 
-def test_verdict_format_problems():
-    probs = nt.checks.verdict_problems({"AA": {"call": "broken", "lost_ppm": ["2.0"]}}, ["AA"])
-    assert len(probs) == 2
-
-
 def test_prediction_feedback_mentions_water():
-    rep = nt.checks.check_prediction({"AA_methyl_ppm": 1.5}, {"AA_methyl_ppm": KEY["prediction"]["AA_methyl_ppm"]})
-    assert rep[0].kind == "note" and "water" in rep[0].text
+    rep = nt.checks.check_prediction({"AA_methyl_ppm": 1.3}, {"AA_methyl_ppm": KEY["prediction"]["AA_methyl_ppm"]})
+    assert rep[0].kind == "look again" and "water" in rep[0].text
+
+
+def test_prediction_is_judged_on_typical_ranges_not_on_this_dataset():
+    # The founder's run: a prediction is made before the spectrum is seen, so the feedback gives the
+    # typical position taught above and sends the member to the spectrum, never this dataset's range.
+    pred = {"AA_signals": 1, "AA_methyl_ppm": 2.0, "AA_alpha_ppm": 3.0, "GG_signals": 4, "GG_ch2_ppm": 5.0,
+            "breaks_down": "Gly-Gly"}
+    rep = nt.checks.check_prediction(pred, KEY["prediction"])
+    text = "\n".join(map(str, rep))
+    assert "[" not in text and "residue" not in text and "alpha-H" not in text
+    assert "Not quite. Ala-Ala signals from hydrogens on carbon: you said 1; the structure gives 4." in text
+    assert "start of the chain" in text and "Open hint 2 above" in text
+    alpha = str(rep[2])
+    assert alpha.startswith("Not quite.") and "near 5 ppm" in alpha and "find where it really sits" in alpha
+    assert "4.8" not in text and "5.3" not in text
+    assert str(rep[1]).startswith("Yes.") and rep[5].kind == "open"
+
+
+def test_reading_after_the_plot_uses_this_dataset():
+    rep = nt.checks.check_reading({"AA_alpha_ppm": 4.92, "AA_methyl_ppm": 3.0}, KEY["reading"], {"AA_alpha_ppm": 3.0})
+    assert rep[0].kind == "look again" and "1.9 to 2.2" in rep[0].text
+    assert rep[1].kind == "agrees" and "4.8 to 5.3" in rep[1].text and "You predicted 3.0" in rep[1].text
+    assert rep[2].kind == "to do"
+
+
+def test_plain_call_words_are_accepted():
+    case = nt.answers.case(KEY, "AA")
+    assert nt.checks.check_verdict({"call": "breaks down"}, case)[0].kind == "agrees"
+    assert nt.checks.check_verdict({"call": "degrades"}, case)[0].kind == "agrees"
+    assert "'breaks down'" in nt.checks.check_verdict({"call": "survives"}, case)[0].text
+    assert nt.checks.verdict_problems({"AA": {"call": "side chain changed"}}, ["AA"]) == []
+    row = nt.record.replication_row("LL", "K", {"call": "breaks down"}, ["1day", "4Month"])
+    assert row["verdict"] == "degrades"
+
+
+def test_format_messages_are_friendly_and_never_block():
+    probs = nt.checks.verdict_problems({"AA": {"call": "broken", "lost_ppm": ["2.0"]}}, ["AA"], {"AA": "Ala-Ala"})
+    assert probs[0].startswith('The call for Ala-Ala is "broken": write one of "survives", "breaks down"')
+    assert "without quotes" in probs[1]
+    notes = nt.checks.verdict_notes({"AA": {"call": "", "lost_ppm": [], "kept_ppm": [2.0]}}, ["AA"], {"AA": "Ala-Ala"})
+    assert notes == ['Ala-Ala: still empty: call, lost peaks. An empty peak list is fine if there were none, '
+                     'and "unsure" is a fair call.']
+
+
+def test_write_down_confirms_by_name(capsys):
+    nt.record.write_down("AA_LOST_PPM", [2.08, 4.94], "Ala-Ala", "lost_ppm", suggestion=[5.17, 2.08])
+    out = capsys.readouterr().out
+    assert out.startswith("Saved AA_LOST_PPM = [2.08, 4.94]: 2 lost peaks for Ala-Ala, at 2.08 and 4.94 ppm.")
+    assert "also listed 5.17" in out
+    nt.record.write_down("AA_LOST_PPM", [], "Ala-Ala", "lost_ppm", suggestion=[5.17])
+    assert "Copy the ones you agree with" in capsys.readouterr().out
+    nt.record.write_down("AA_CALL", "", "Ala-Ala", "call")
+    assert capsys.readouterr().out.startswith("Not saved yet AA_CALL = ''")
+    nt.record.write_down("AA_CALL", "breaks down", "Ala-Ala", "call")
+    assert capsys.readouterr().out.startswith("Saved AA_CALL = 'breaks down'")
+
+
+def test_build_verdict_keeps_the_hand_in_format(capsys):
+    v = nt.record.build_verdict({"AA": {"call": "unsure", "lost_ppm": [1.99]}}, names={"AA": "Ala-Ala"},
+                                examples={"Gly-Gly (example)": {"call": "survives"}}, note="n")
+    assert v == {"AA": {"call": "unsure", "lost_ppm": [1.99]}, "note": "n"}
+    out = capsys.readouterr().out
+    assert "| **Gly-Gly (example)** | survives |" in out and "| **Ala-Ala** | unsure | 1.99 |" in out
 
 
 def test_backbone_check():
@@ -169,7 +227,7 @@ def test_every_key_holds_published_calls_only(name):
     key = nt.answers.load(name, quiet=True)
     assert key["status"] == "published calls only" and key["cases"]
     for cid, case in key["cases"].items():
-        assert case["call"] in nt.checks.CALLS and case["call"] != "unsure", cid
+        assert case["call"] in nt.checks.KEY_CALLS and case["call"] != "unsure", cid
         assert re.search(r"et al\. 20\d\d", case["call_source"]), cid
         if "product" in case:
             assert re.search(r"et al\.", case["product_source"]), cid

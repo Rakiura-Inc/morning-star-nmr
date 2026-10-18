@@ -35,6 +35,16 @@ def test_offline_mode_logs_and_saves_files(tmp_path, capsys):
     assert nt.portal.submit() is False   # offline mode never sends anything
 
 
+def test_offline_ticks_print_plain_words_not_part_names(capsys):
+    nt.portal.connect("notebooks/01_capstone_ala_ala_vs_gly_gly.ipynb")
+    capsys.readouterr()
+    assert nt.portal.done("capstone-predict")
+    out = capsys.readouterr().out
+    assert out.strip() == "Prediction saved (offline mode: kept on this computer)."
+    log = json.load(open(os.path.join(nt.portal.state.handin_dir, "rakiura_progress.json")))
+    assert log[-1]["part"] == "capstone-predict"   # the portal still gets the part name
+
+
 def test_reveal_refuses_before_a_prediction(capsys):
     nt.record.predict("blank", {"a": ...})
     assert nt.record.revealed("blank") is False
@@ -51,7 +61,7 @@ def test_part_names_and_numbers_are_validated(capsys):
 
 def test_fill_keeps_the_notebook_running(capsys):
     assert nt.record.fill(..., (1.0, 6.5), "REGION") == (1.0, 6.5)
-    assert "[to do] REGION" in capsys.readouterr().out
+    assert "To do: REGION" in capsys.readouterr().out
     assert nt.record.fill((0.5, 9.5), (1.0, 6.5), "REGION") == (0.5, 9.5)
 
 

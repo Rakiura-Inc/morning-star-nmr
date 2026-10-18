@@ -160,9 +160,17 @@ def done(part: str, figures: list | None = None, numbers: dict | None = None) ->
     if state.mode == "live":
         return bool(state.helper.done(part, figures=figures or None, numbers=clean or None))
     _offline_log({"part": part, "figures": len(figures), "numbers": clean})
-    extra = (f", {len(figures)} figure(s)" if figures else "") + (f", {len(clean)} number(s)" if clean else "")
-    print(f"rakiura: {part} done{extra} (offline log)")
+    print(f"{saved_words(part)} (offline mode: kept on this computer).")
     return True
+
+
+# What a member reads when a part is ticked. The part name itself stays internal (the portal keys on it).
+_SAVED = {"predict": "Prediction saved", "stack": "Stacked plot saved", "compare": "Comparison saved",
+          "verdict": "Hand-in saved", "overlay": "Overlay saved"}
+
+
+def saved_words(part: str) -> str:
+    return _SAVED.get(part.rsplit("-", 1)[-1], "Progress saved")
 
 
 def stage_file(text: str, title: str, mime: str = "text/plain") -> bool:

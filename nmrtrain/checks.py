@@ -13,7 +13,15 @@ import numpy as np
 from . import peaks as _peaks
 from .io import Spectrum, time_label
 
-CALLS = ("survives", "degrades", "side chain modified", "unsure")
+# The calls a member writes, in plain words. The answer keys and the replication table keep the
+# older words ("degrades", "side chain modified"); both spellings are accepted everywhere.
+CALLS = ("survives", "breaks down", "side chain changed", "unsure")
+KEY_CALLS = ("survives", "degrades", "side chain modified", "unsure")
+_CALL_WORDS = {"degrades": "breaks down", "degraded": "breaks down", "broke down": "breaks down",
+               "breaks": "breaks down", "break down": "breaks down",
+               "side chain modified": "side chain changed", "side-chain changed": "side chain changed",
+               "side chain change": "side chain changed"}
+_KEY_WORD = {"breaks down": "degrades", "side chain changed": "side chain modified"}
 CONFIDENCE = ("low", "medium", "high")
 
 # Where the acid's own big signal sits on the instrument's ppm scale in these datasets.
@@ -25,13 +33,31 @@ EXCHANGEABLE = (6.3, 9.6)         # NH and NH3+ signals of non-aromatic samples 
 AROMATIC = {"FF", "YY", "WW", "HH", "PHE", "TYR", "TRP", "HIS"}
 
 
+def plain_call(call) -> str:
+    """A call in the member's words: "degrades" reads as "breaks down", and so on."""
+    c = str(call or "").strip().lower()
+    return _CALL_WORDS.get(c, c)
+
+
+def key_call(call) -> str:
+    """A call in the answer keys' words (used by the replication table)."""
+    c = plain_call(call)
+    return _KEY_WORD.get(c, c)
+
+
+# What each kind of line starts with when printed. The kind itself stays internal.
+PREFIX = {"agrees": "Yes.", "look again": "Not quite.", "to do": "To do:", "tip": "Tip:", "note": "Note:",
+          "trap": "Trap:", "ok": "OK:", "open": ""}
+
+
 @dataclass
 class Feedback:
     kind: str      # agrees | look again | open | to do | tip | note | trap | ok
     text: str
 
     def __str__(self) -> str:
-        return f"[{self.kind}] {self.text}"
+        lead = PREFIX.get(self.kind, "")
+        return f"{lead} {self.text}" if lead else self.text
 
 
 class Report(list):
@@ -183,51 +209,145 @@ def traps_flagged(*reports: Report) -> int:
 # predictions and verdicts
 
 
+def _number(v):
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+LOOK_NEXT = "Now look at the spectra below and find where it really sits."
+
+
 def check_prediction(pred: dict, key: dict) -> Report:
-    """Comparison of a prediction with a key of {field: {"answer", "band", "water"}}."""
+    """Feedback on a prediction made before the member has seen the data.
+
+    key: {field: spec}. A spec is one of:
+      {"label", "answer", "why"}                       a count that follows from the structure
+      {"label", "typical", "typical_text", "water"}    a position, judged only against the typical
+                                                       range the notebook teaches (never this dataset)
+      {"label", "later"}                               a call the member checks later in the notebook
+    """
     rep = Report()
     for name, k in key.items():
         v = pred.get(name)
         label = k.get("label", name)
-        if v is None or v is ...:
-            rep.append(Feedback("to do", f"{label}: no prediction entered. Compare with the reveal."))
+        if v is None or v is ... or v == "":
+            rep.append(Feedback("to do", f"{label}: no prediction entered. You can still find it in the spectra below."))
+        elif "later" in k:
+            rep.append(Feedback("open", f"{label}: you said {v!r}. {k['later']}"))
         elif "answer" in k:
-            rep.append(Feedback("agrees", f"{label}: {v}. This matches the data.") if v == k["answer"] else
-                       Feedback("look again", f"{label}: you said {v}; there are {k['answer']} ({k.get('why', '')})."))
-        else:
-            lo, hi = k["band"]
-            water = k.get("water")
-            try:
-                v = float(v)
-            except (TypeError, ValueError):
-                rep.append(Feedback("look again", f"{label}: use a number in ppm, for example 2.0."))
-                continue
-            if lo <= v <= hi:
-                rep.append(Feedback("agrees", f"{label}: {v} ppm. This is where it appears in this data ({lo} to {hi} ppm)."))
-            elif water and water[0] <= v <= water[1]:
-                rep.append(Feedback("note", f"{label}: {v} ppm is where it sits in water. The acid moves it up by "
-                                            "about half a ppm or more."))
+            why = k.get("why", "")
+            if v == k["answer"]:
+                rep.append(Feedback("agrees", f"{label}: {v}. {why}"))
             else:
-                rep.append(Feedback("look again", f"{label}: you said {v} ppm; in this data it appears at {lo} to {hi} ppm."))
+                rep.append(Feedback("look again", f"{label}: you said {v}; the structure gives {k['answer']}. {why} "
+                                                  "Open hint 2 above if this is still unclear."))
+        else:
+            x = _number(v)
+            if x is None:
+                rep.append(Feedback("to do", f"{label}: write a number in ppm, for example 2.0."))
+                continue
+            lo, hi = k["typical"]
+            near = k.get("typical_text", f"between {lo} and {hi} ppm")
+            water = k.get("water")
+            if lo <= x <= hi:
+                rep.append(Feedback("agrees", f"{label}: {x:g} ppm fits {near}. {LOOK_NEXT}"))
+            elif water and water[0] <= x <= water[1]:
+                rep.append(Feedback("look again", f"{label}: {x:g} ppm is closer to where it sits in water. The acid "
+                                                  "pulls electrons away from the hydrogens, so signals sit higher "
+                                                  f"in acid; the table above gives {near}. {LOOK_NEXT}"))
+            else:
+                rep.append(Feedback("look again", f"{label}: you said {x:g} ppm; the table above gives {near}. "
+                                                  f"{LOOK_NEXT}"))
     return rep
 
 
-def verdict_problems(verdict: dict, cases: list[str]) -> list[str]:
-    """Format problems only (not right or wrong): what to fix before the check can read a verdict."""
+def check_reading(reading: dict, key: dict, prediction: dict | None = None) -> Report:
+    """Feedback on positions the member read off the spectra (after the plots). Here the ranges
+    measured in this dataset are used: key {field: {"label", "band"}}."""
+    rep = Report()
+    for name, k in key.items():
+        if "band" not in k:
+            continue
+        label = k.get("label", name)
+        x = _number(reading.get(name))
+        if x is None:
+            rep.append(Feedback("to do", f"{label}: read its position off the plot or peak list above and "
+                                         "write it as a number."))
+            continue
+        lo, hi = k["band"]
+        before = (prediction or {}).get(name)
+        was = f" You predicted {before} ppm." if _number(before) is not None else ""
+        if lo <= x <= hi:
+            rep.append(Feedback("agrees", f"{label}: {x:g} ppm. In this data it sits at {lo} to {hi} ppm.{was}"))
+        else:
+            rep.append(Feedback("look again", f"{label}: {x:g} ppm. Check which peak you read: in this data it sits "
+                                              f"at {lo} to {hi} ppm.{was}"))
+    return rep
+
+
+FIELD_WORDS = {"call": "call", "lost_ppm": "lost peaks", "new_ppm": "new peaks", "kept_ppm": "kept peaks",
+               "left": "how much is left", "product_guess": "product guess", "confidence": "confidence"}
+LEFT = ("most", "about half", "little or none", "unsure")
+HARSHER = ("98%", "81%", "same", "unsure")
+
+
+def quoted(words) -> str:
+    """'"a", "b" or "c"', for listing the allowed answers."""
+    w = [f'"{x}"' for x in words]
+    return ", ".join(w[:-1]) + " or " + w[-1]
+
+
+def verdict_problems(verdict: dict, cases: list[str], names: dict | None = None) -> list[str]:
+    """Things to fix before the check can read a verdict (format only, never right or wrong)."""
     issues = []
     for case in cases:
-        entry = verdict.get(case, {})
-        call = str(entry.get("call", "")).strip().lower()
+        who = (names or {}).get(case, case)
+        entry = verdict.get(case, {}) or {}
+        call = plain_call(entry.get("call", ""))
         if call and call not in CALLS:
-            issues.append(f"{case}: call should be one of {', '.join(CALLS)} (got {call!r})")
+            issues.append(f'The call for {who} is "{entry.get("call")}": write one of {quoted(CALLS)}.')
         conf = str(entry.get("confidence", "")).strip().lower()
         if conf and conf not in CONFIDENCE:
-            issues.append(f"{case}: confidence should be one of {', '.join(CONFIDENCE)} (got {conf!r})")
+            issues.append(f'The confidence for {who} is "{entry.get("confidence")}": write one of {quoted(CONFIDENCE)}.')
+        left = str(entry.get("left", "")).strip().lower()
+        if left and left not in LEFT:
+            issues.append(f'How much is left for {who} is "{entry.get("left")}": write one of {quoted(LEFT)}.')
         for k in ("lost_ppm", "new_ppm", "kept_ppm"):
             for p in entry.get(k, []) or []:
                 if not isinstance(p, (int, float)):
-                    issues.append(f"{case}: {k} holds {p!r}; use numbers like 2.09")
+                    issues.append(f"The {FIELD_WORDS[k]} for {who} include {p!r}: write numbers without quotes, "
+                                  "like [2.08, 4.94].")
     return issues
+
+
+def _blank(v) -> bool:
+    return not v.strip() if isinstance(v, str) else not v
+
+
+def verdict_notes(verdict: dict, cases: list[str], names: dict | None = None) -> list[str]:
+    """One friendly line per molecule naming the fields still empty. Empty is allowed; nothing here
+    blocks the hand-in."""
+    notes = []
+    for case in cases:
+        who = (names or {}).get(case, case)
+        entry = verdict.get(case, {}) or {}
+        empty = [FIELD_WORDS[k] for k in FIELD_WORDS if k in entry and _blank(entry[k])]
+        if empty:
+            notes.append(f"{who}: still empty: {', '.join(empty)}. An empty peak list is fine if there were "
+                         'none, and "unsure" is a fair call.')
+    return notes
+
+
+def show_format(verdict: dict, cases: list[str], names: dict | None = None) -> list[str]:
+    """Print the format problems and the notes on empty fields. Returns the problems."""
+    problems = verdict_problems(verdict, cases, names)
+    for line in problems + verdict_notes(verdict, cases, names):
+        print(f"  {line}")
+    if not problems:
+        print("Nothing here blocks your hand-in. Change any answer above and run the cells again to update it.")
+    return problems
 
 
 def _dist(s: dict, p: float) -> float:
@@ -248,12 +368,12 @@ def check_verdict(entry: dict, case: dict, tol: float | None = None, sample: str
     sample = sample or case.get("sample", "")
     rep = Report()
     entry = entry or {}
-    call = str(entry.get("call", "")).strip().lower()
-    expected = case.get("call")
+    call = plain_call(entry.get("call", ""))
+    expected = plain_call(case.get("call")) or None
     source = case.get("call_source", "the published finding")
     check = f"Check your call against {case.get('check_against', 'the paper')}."
     if not call:
-        rep.append(Feedback("to do", "No call yet: choose " + ", ".join(CALLS) + "."))
+        rep.append(Feedback("to do", f"No call yet: write one of {quoted(CALLS)}."))
     elif call == "unsure":
         settle = f" What settles it: {case['why']}." if case.get("why") else ""
         rep.append(Feedback("open", "You answered unsure, which is a fair call on this data." + settle
@@ -264,8 +384,9 @@ def check_verdict(entry: dict, case: dict, tol: float | None = None, sample: str
         rep.append(Feedback("agrees", f"This matches {source}: '{expected}'."))
     else:
         why = f": {case['why']}" if case.get("why") else ""
-        rep.append(Feedback("look again", f"This differs from {source} ('{expected}'){why}. "
-                                          "Your hand-in goes to review as you wrote it."))
+        rep.append(Feedback("look again", f"This differs from {source} ('{expected}'){why}. Look again at the "
+                                          "peaks you listed as lost and kept. Your hand-in goes to review as you "
+                                          "wrote it."))
 
     signals = case.get("signals", [])
     cited = {g: [p for p in (entry.get(f"{g}_ppm") or []) if isinstance(p, (int, float))]
@@ -281,8 +402,9 @@ def check_verdict(entry: dict, case: dict, tol: float | None = None, sample: str
                 why = hit.get("if_listed_as", {}).get(group, f"in the data this one is {hit['group']} ({hit['what']}).")
                 rep.append(Feedback("look again", f"{p:.2f} (you said {group}): {why}"))
             elif group == "lost" and EXCHANGEABLE[0] <= p <= EXCHANGEABLE[1] and sample not in AROMATIC:
-                rep.append(Feedback("note", f"{p:.2f} (lost): NH and OH protons exchange with the deuterated acid and "
-                                            "often fade or do not show. A missing NH peak is not evidence of breakdown."))
+                rep.append(Feedback("note", f"{p:.2f} (lost): hydrogens on nitrogen or oxygen swap with the acid's "
+                                            "deuterium, so their signals often fade or do not show. A missing NH peak "
+                                            "is not evidence of breakdown."))
             elif _nearest(signals, 12.0 - p, tol):
                 m = _nearest(signals, 12.0 - p, tol)
                 rep.append(Feedback("look again", f"{p:.2f}: nothing here, but its mirror image {12.0 - p:.2f} is "
@@ -305,7 +427,8 @@ def check_verdict(entry: dict, case: dict, tol: float | None = None, sample: str
         elif any(w in guess for w in case.get("close_words", [])):
             rep.append(Feedback("note", case.get("close_message", f"Close. The published product is {case['product']}.")))
         else:
-            rep.append(Feedback("look again", f"Product '{guess}': the published product is {case['product']}."))
+            rep.append(Feedback("look again", f"Product '{guess}': the published product is {case['product']}. "
+                                              "See Look closer below for its spectrum."))
     elif guess and expected is None:
         rep.append(Feedback("open", f"Product '{guess}': check it against {case.get('check_against', 'the paper')}."))
 
@@ -349,19 +472,20 @@ def similarity_feedback(r: float, threshold: float = 0.95) -> Feedback:
 
 
 def check_backbone(ppm, case: dict | None = None, tol: float | None = None) -> Feedback:
-    """The member's backbone signal (the alpha-H). Compared only when the case names one; otherwise
-    it is saved for the reviewer."""
+    """The member's backbone signal (the alpha hydrogen). Compared only when the case names one;
+    otherwise it is saved for the reviewer."""
     case = case or {}
     tol = tol if tol is not None else case.get("tolerance_ppm", 0.05)
     if ppm is ... or ppm is None:
         return Feedback("to do", "No backbone signal chosen yet.")
     bb = [s for s in case.get("signals", []) if s.get("backbone")]
     if not bb:
-        return Feedback("open", f"{float(ppm):.2f} ppm: saved with your hand-in. Your reviewer goes over it with you.")
+        return Feedback("open", f"Saved: {float(ppm):.2f} ppm as your backbone signal. It goes in your hand-in, and "
+                                "your reviewer goes over it with you.")
     if any(abs(s["ppm"] - float(ppm)) <= tol for s in bb):
         return Feedback("agrees", f"{float(ppm):.2f} ppm: {bb[0]['what']}.")
     hit = _nearest(case.get("signals", []), float(ppm), tol)
     if hit:
-        return Feedback("look again", f"{float(ppm):.2f} ppm is {hit['what']}. The backbone signal is the H on the "
-                                      "carbon that carries both the NH3+ and the COOH.")
+        return Feedback("look again", f"{float(ppm):.2f} ppm is {hit['what']}. The backbone signal is the alpha "
+                                      "hydrogen: the hydrogen on the carbon next to the nitrogen.")
     return Feedback("look again", f"No signal near {float(ppm):.2f} ppm in the key. Pick a peak from your list.")

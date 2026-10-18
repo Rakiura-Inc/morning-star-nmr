@@ -6,47 +6,54 @@
  "data": "Zenodo 10.5281/zenodo.11223995, Supplementary dataset S1, samples AA and GG, acid K (98% w/w D2SO4)",
  "prediction": {
   "AA_signals": {
-   "label": "Ala-Ala C-H signals",
+   "label": "Ala-Ala signals from hydrogens on carbon",
    "answer": 4,
-   "why": "two methyls and two alpha-H, one of each per residue"
+   "why": "Ala-Ala has two methyls and two alpha hydrogens. The two alanines are not in identical places (one at the start of the chain, one at the end), so each methyl and each alpha hydrogen gives its own signal."
   },
   "AA_methyl_ppm": {
-   "label": "Ala-Ala methyl",
-   "band": [
-    1.9,
-    2.2
+   "label": "Ala-Ala methyl (CH3)",
+   "typical": [
+    1.5,
+    2.5
    ],
+   "typical_text": "a methyl near 2 ppm in this acid",
    "water": [
     1.2,
     1.8
    ]
   },
   "AA_alpha_ppm": {
-   "label": "Ala-Ala alpha-H",
-   "band": [
-    4.8,
-    5.3
+   "label": "Ala-Ala alpha hydrogen (the hydrogen on the carbon next to the nitrogen)",
+   "typical": [
+    4.5,
+    5.5
    ],
+   "typical_text": "an alpha hydrogen near 5 ppm in this acid",
    "water": [
     3.8,
     4.6
    ]
   },
   "GG_signals": {
-   "label": "Gly-Gly C-H signals",
+   "label": "Gly-Gly signals from hydrogens on carbon",
    "answer": 2,
-   "why": "one CH2 per residue"
+   "why": "Gly-Gly has one CH2 on each glycine. The two hydrogens of one CH2 sit in the same place and give one signal together, but the two glycines do not (one at the start of the chain, one at the end), so each CH2 gives its own signal."
   },
   "GG_ch2_ppm": {
    "label": "Gly-Gly CH2",
-   "band": [
-    4.5,
-    4.9
+   "typical": [
+    4.2,
+    5.0
    ],
+   "typical_text": "a glycine CH2 near 4.6 ppm in this acid",
    "water": [
     3.7,
     4.2
    ]
+  },
+  "breaks_down": {
+   "label": "Which breaks down in 4 months",
+   "later": "You check this yourself in Parts 2 to 4, from the spectra."
   }
  },
  "cases": {
@@ -84,6 +91,29 @@
    ],
    "product": "none: Gly-Gly is still there",
    "product_source": "the published finding (Petkowski et al. 2024, Sci. Rep. 14, 17083)"
+  }
+ },
+ "reading": {
+  "AA_methyl_ppm": {
+   "label": "Ala-Ala methyls at 1 day",
+   "band": [
+    1.9,
+    2.2
+   ]
+  },
+  "AA_alpha_ppm": {
+   "label": "Ala-Ala alpha hydrogens at 1 day",
+   "band": [
+    4.8,
+    5.3
+   ]
+  },
+  "GG_ch2_ppm": {
+   "label": "Gly-Gly CH2 at 1 day",
+   "band": [
+    4.5,
+    4.9
+   ]
   }
  }
 }

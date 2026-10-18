@@ -9,8 +9,10 @@ spectra.
 | `dipeptides.json` | 02 | Ala-Ala degrades, Gly-Gly survives (98% acid) | Petkowski et al. 2024, *Scientific Reports* 14, 17083 |
 | `c13_series.json` | 05 | Ala-Ala degrades, Gly-Gly survives (98% acid, 13C) | Petkowski et al. 2024, *Scientific Reports* 14, 17083 |
 
-`capstone.json` also holds the prediction ranges for Part 0 of notebook 01: how many C-H signals
-each structure gives and where those signals sit in this acid.
+`capstone.json` and `c13_series.json` also hold two sets of ranges. `prediction` holds the typical
+positions the notebook teaches before the spectra are shown (and, for notebook 01, how many signals
+each structure gives); a prediction is judged only against these. `reading` holds the ranges
+measured in this data, used only after the member has read the positions off the plots.
 
 **Every other case has no key.** Members check their call against the paper's tables:
 

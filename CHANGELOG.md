@@ -1,6 +1,15 @@
 # Changelog
 
 ## 0.1.0 (2026-10-18, not published)
+- Every question is scaffolded: a What you need cell (facts, a figure or table, the matching step by
+  name), a RECORD YOUR ANSWER box with fold-out hints, and a comment on each line to fill in.
+- Predictions are judged against the typical ranges the notebook teaches, never against this
+  dataset; the measured ranges appear only after the member reads the plots (`check_reading`).
+- Verdicts are recorded one field at a time (`nt.record.write_down`) and shown as one table
+  (`nt.record.build_verdict`), with a filled Gly-Gly (or alanine) example row.
+- Feedback in plain words: "Yes." / "Not quite." instead of bracketed labels; plain call words
+  ("breaks down", "side chain changed"; the older words still work); ticks print "Prediction saved"
+  instead of the internal part name.
 - Repository named `Rakiura-Inc/morning-star-nmr`; code under MIT (data stays CC BY 4.0);
   the no-helper fallback is now called offline mode.
 - The three alanine practice spectra (98%, 1H, 1 day / 1 week / 1 month; Zenodo 8381013, CC BY 4.0)

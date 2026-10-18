@@ -24,7 +24,12 @@ Each notebook has:
 * a short introduction
 * **predict, then reveal**: the reveal cell will not run until you enter a prediction
 * worked cells that you run and read
-* a few **Your turn** cells, with stand-in values so the notebook always runs
+* a **What you need** cell before every question: the facts it rests on, a figure or table where it
+  helps, and the matching bootcamp or NMR step by name
+* a **RECORD YOUR ANSWER** box above every cell a member fills in: what gets saved, where to look,
+  how to fill it in, and two fold-out hints; each recording cell confirms what it saved
+* the verdict recorded one field at a time, next to the plot that answers it, then shown as one
+  table before the hand-in (with a filled example row)
 * trap checks next to the cells they apply to
 * a hand-in cell that saves the figures and a `verdict.json` and ticks the step on Rakiura
 
