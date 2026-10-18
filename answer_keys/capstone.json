@@ -2,7 +2,7 @@
  "step": "Bootcamp: Reproduce the Ala-Ala verdict (Ala-Ala vs Gly-Gly in 98% sulfuric acid)",
  "version": "0.2.0",
  "status": "published calls only",
- "source": "Petkowski et al. 2024, Sci. Rep. 14, 17083 (calls); Petkowski et al., ACS Omega 2025 (the Ala-Ala product)",
+ "source": "Petkowski et al. 2024, Sci. Rep. 14, 17083 (decisions); Petkowski et al., ACS Omega 2025 (the Ala-Ala product)",
  "data": "Zenodo 10.5281/zenodo.11223995, Supplementary dataset S1, samples AA and GG, acid K (98% w/w D2SO4)",
  "prediction": {
   "AA_signals": {
@@ -72,8 +72,8 @@
    "close_words": [
     "alanine"
    ],
-   "close_message": "Free alanine is what water would give. In 98% acid the mechanism study reports alaninamide: one alanine keeps the amide end. See Look closer for its reference spectrum.",
-   "product": "alaninamide (alanine with an amide end)",
+   "close_message": "Free alanine is what splitting the peptide bond with water would give, as in 81% acid. In 98% acid the mechanism study reports alaninamide instead: the end alanine's bond to its nitrogen (a C-N bond) breaks, so the first alanine keeps that nitrogen as an amide group (CONH2) and the end alanine leaves as acrylic acid. See Look closer for the alaninamide spectrum.",
+   "product": "alaninamide (alanine with an amide group, CONH2, in place of its COOH)",
    "product_source": "the mechanism study (Petkowski et al., ACS Omega 2025, Mechanism for peptide bond solvolysis in 98% w/w concentrated sulfuric acid; reference spectra on Zenodo 10.5281/zenodo.11122291)"
   },
   "GG": {

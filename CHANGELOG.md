@@ -1,6 +1,19 @@
 # Changelog
 
 ## 0.1.0 (2026-10-18, not published)
+- How much is left is measured against the acid peak in the same file, as a fraction of day 1
+  (`nt.peaks.against_acid`, `left_of_first`, `left_band`: most two thirds or more, about half one
+  third to two thirds, little or none under one third), in notebooks 01 and 02. Ala-Ala's 1.99 ppm
+  methyl: 100, 91, 57, 7, 0% of day 1. The share of all peaks from hydrogens on carbon is no longer
+  used for this, because that total shrinks as a molecule breaks down.
+- Notebook 04 prints the acid peak in both spectra and the largest difference between matching
+  lines (`nt.peaks.line_differences`, `nt.checks.line_feedback`) next to the similarity, and records
+  a yes / no / unsure decision. A zero-fill below the recording's size no longer crashes; the hint
+  offers 32768 (the instrument's choice) and 131072.
+- Notebook 03 offers asparagine in 98% acid (`CASE = "ASN-K"`), the NMR project step 2 hand-in.
+- Clarity pass on all five notebooks: the Ala-Ala mechanism as the mechanism study gives it
+  (alaninamide plus acrylic acid, from the end alanine's C-N bond breaking), member text and
+  feedback say "decision" for the call, "Look again." replaces "Not quite.", titles match the steps.
 - Each notebook has a Connect to Rakiura cell under the setup cell (`nt.portal.connect(NOTEBOOK,
   sign_in=True)`): it prints a sign-in link, the member checks the code and clicks Allow. The setup
   cell still connects only without a click, and now prints "Connected to Rakiura as <name>." or

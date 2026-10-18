@@ -91,13 +91,13 @@ SYNTH = {"sample": "XX", "acid": "K", "call": "degrades", "call_source": "a test
                      {"ppm": 6.00, "group": "new", "what": "a small test peak", "optional": True}],
          "expect": {"1day": {"present": [3.10, 2.50], "absent": []},
                     "4Month": {"present": [4.20, 2.50], "absent": [3.10]}}}
-DIPEPTIDE_TABLES = "Check your call against Table 1 (81%) and Table 2 (98%) of the paper"
+DIPEPTIDE_TABLES = "Check your decision against Table 1 (81%) and Table 2 (98%) of the paper"
 GRADING = re.compile(r"\b(correct|incorrect|wrong|score|points|grade)\b|\d%", re.I)
 
 
 def test_unsure_is_always_a_fair_answer():
     rep = nt.checks.check_verdict({"call": "unsure"}, nt.answers.case(KEY, "AA"))
-    assert rep[0].kind == "open" and "fair call" in rep[0].text
+    assert rep[0].kind == "open" and "fair answer" in rep[0].text
 
 
 def test_published_call_is_compared_with_its_source():
@@ -159,10 +159,10 @@ def test_prediction_is_judged_on_typical_ranges_not_on_this_dataset():
     rep = nt.checks.check_prediction(pred, KEY["prediction"])
     text = "\n".join(map(str, rep))
     assert "[" not in text and "residue" not in text and "alpha-H" not in text
-    assert "Not quite. Ala-Ala signals from hydrogens on carbon: you said 1; the structure gives 4." in text
+    assert "Look again. Ala-Ala signals from hydrogens on carbon: you said 1; the structure gives 4." in text
     assert "start of the chain" in text and "Open hint 2 above" in text
     alpha = str(rep[2])
-    assert alpha.startswith("Not quite.") and "near 5 ppm" in alpha and "find where it really sits" in alpha
+    assert alpha.startswith("Look again.") and "near 5 ppm" in alpha and "find where it really sits" in alpha
     assert "4.8" not in text and "5.3" not in text
     assert str(rep[1]).startswith("Yes.") and rep[5].kind == "open"
 
@@ -186,11 +186,11 @@ def test_plain_call_words_are_accepted():
 
 def test_format_messages_are_friendly_and_never_block():
     probs = nt.checks.verdict_problems({"AA": {"call": "broken", "lost_ppm": ["2.0"]}}, ["AA"], {"AA": "Ala-Ala"})
-    assert probs[0].startswith('The call for Ala-Ala is "broken": write one of "survives", "breaks down"')
+    assert probs[0].startswith('The decision for Ala-Ala is "broken": write one of "survives", "breaks down"')
     assert "without quotes" in probs[1]
     notes = nt.checks.verdict_notes({"AA": {"call": "", "lost_ppm": [], "kept_ppm": [2.0]}}, ["AA"], {"AA": "Ala-Ala"})
-    assert notes == ['Ala-Ala: still empty: call, lost peaks. An empty peak list is fine if there were none, '
-                     'and "unsure" is a fair call.']
+    assert notes == ['Ala-Ala: still empty: decision, lost peaks. An empty peak list is fine if there were none, '
+                     'and "unsure" is a fair answer.']
 
 
 def test_write_down_confirms_by_name(capsys):
@@ -254,3 +254,23 @@ def test_a_case_with_no_key_points_to_the_paper_tables(capsys):
     rep = nt.checks.check_verdict({"call": "side chain modified", "product_guess": "x"}, nt.answers.case(amino, "ASN-H"))
     assert "Astrobiology 24, 386" in rep[0].text and rep[0].kind == "open"
     assert all(f.kind in ("open", "to do", "note") for f in rep)
+
+
+def test_how_much_is_left_is_measured_against_the_acid_peak():
+    first = synthetic(AA_1DAY)
+    half = synthetic([(p, h * 0.5) for p, h in AA_1DAY], time="8day")
+    gone = synthetic([(p, h * 0.1) for p, h in AA_1DAY], time="4Month")
+    left = nt.peaks.left_of_first([first, half, gone], (1.75, 1.81))
+    assert left[0] == 1.0 and abs(left[1] - 0.5) < 0.02 and abs(left[2] - 0.1) < 0.02
+    assert [nt.peaks.left_band(x) for x in (1.0, 0.67, 0.5, 0.34, 0.33, 0.0)] == [
+        "most", "most", "about half", "about half", "little or none", "little or none"]
+
+
+def test_line_differences_find_the_largest_shift():
+    inst = synthetic(AA_1DAY)
+    mine = synthetic([(p + (0.004 if p > 5 else 0.0), h) for p, h in AA_1DAY])
+    d = nt.peaks.line_differences(mine, inst)
+    assert abs(d["largest_ppm"] - 0.004) < 0.001 and abs(d["at_ppm"] - 5.30) < 0.002 and d["lines"] == 6
+    assert nt.checks.line_feedback(d).kind == "agrees"
+    far = nt.peaks.line_differences(synthetic([(p + 0.05, h) for p, h in AA_1DAY]), inst)
+    assert nt.checks.line_feedback(far).kind == "look again"

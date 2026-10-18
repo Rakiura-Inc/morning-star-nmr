@@ -86,13 +86,45 @@ def similarity(a: Spectrum, b: Spectrum, lo: float = 1.0, hi: float = 6.5) -> fl
     return float(np.corrcoef(ya, b.y[m])[0, 1])
 
 
-def share(s: Spectrum, window: tuple, region: tuple = (1.5, 5.45), skip: tuple | None = None) -> float:
-    """One signal's area (window, in ppm) as a share of all the area in `region` (by default the
-    hydrogens on carbon of these peptides), leaving out `skip` (for example the NH signals).
-    Compares within one spectrum, since these samples carry no added reference compound."""
-    total = area(s, *region)
-    if skip:
-        lo, hi = max(region[0], skip[0]), min(region[1], skip[1])
-        if lo < hi:
-            total -= area(s, lo, hi)
-    return max(area(s, *window) / total, 0.0) if total > 0 else 0.0
+# The acid's own peak (sulfuric acid and its water) sits between 11.4 and 12.1 ppm in these datasets.
+ACID_AREA = (10.0, 13.0)
+
+
+def against_acid(s: Spectrum, window: tuple, acid: tuple = ACID_AREA) -> float:
+    """A peak's area (window, in ppm) divided by the acid peak's area in the same file.
+
+    These samples have no internal standard, and raw areas cannot be compared between files (each
+    file's intensity is scaled differently), so a peak is measured against the acid peak, which is
+    the same in every file of a series."""
+    ref = area(s, *acid)
+    return max(area(s, *window) / ref, 0.0) if ref > 0 else 0.0
+
+
+def left_of_first(series: list, window: tuple, acid: tuple = ACID_AREA) -> list[float]:
+    """How much is left at each time point: the peak against the acid peak, as a fraction of the
+    same ratio in the first file of the series (1.0 at the first time point)."""
+    ratios = [against_acid(s, window, acid) for s in series]
+    return [r / ratios[0] if ratios[0] > 0 else 0.0 for r in ratios]
+
+
+def left_band(fraction: float) -> str:
+    """The three bands the steps use: most (two thirds or more), about half (one third to two
+    thirds), little or none (under one third)."""
+    if fraction >= 2 / 3:
+        return "most"
+    return "about half" if fraction >= 1 / 3 else "little or none"
+
+
+def line_differences(mine: Spectrum, theirs: Spectrum, lo: float = 1.0, hi: float = 6.5,
+                     min_height: float = 0.03) -> dict:
+    """Compare two spectra line by line between lo and hi ppm. Each line of a split signal counts on
+    its own (no grouping). For every line in `theirs`, the nearest line in `mine`; returns the
+    largest of those distances, the line it belongs to, and how many lines were compared."""
+    a = pick(theirs, lo, hi, min_height, group_ppm=0.0)
+    b = pick(mine, lo, hi, min_height, group_ppm=0.0)
+    if not a or not b:
+        return {"largest_ppm": None, "at_ppm": None, "lines": 0}
+    dist = [(min(abs(p["ppm"] - q["ppm"]) for q in b), p["ppm"]) for p in a]
+    d, at = max(dist)
+    return {"largest_ppm": round(d, 4), "at_ppm": at, "lines": len(a)}
+

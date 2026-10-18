@@ -21,7 +21,7 @@
     },
     "04_process_raw_fids.ipynb": {
       "project": "RES-102", "step": null,
-      "parts": {"raw-overlay": "own processing over the instrument's (figure, similarity)"}
+      "parts": {"raw-overlay": "own processing over the instrument's (figure, line differences, similarity, decision)"}
     },
     "05_read_a_13c_series.ipynb": {
       "project": "RES-102", "step": null,

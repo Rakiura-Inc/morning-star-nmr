@@ -28,7 +28,7 @@ CONFIDENCE = ("low", "medium", "high")
 # 98% (K): 11.43 to 11.58 ppm; a few early spectra sit near 11.08 (referenced differently).
 # 81% (H): 11.66 to 12.08 ppm, depending on the sample.
 ACID_WINDOW = {"K": (11.5, 0.5), "H": (11.85, 0.4), None: (11.6, 0.65)}
-ACID_ZONE = (10.0, 13.0)          # never cite a peak in here as the sample's own
+ACID_ZONE = _peaks.ACID_AREA       # never cite a peak in here as the sample's own
 EXCHANGEABLE = (6.3, 9.6)         # NH and NH3+ signals of non-aromatic samples sit here in this acid
 AROMATIC = {"FF", "YY", "WW", "HH", "PHE", "TYR", "TRP", "HIS"}
 
@@ -46,7 +46,7 @@ def key_call(call) -> str:
 
 
 # What each kind of line starts with when printed. The kind itself stays internal.
-PREFIX = {"agrees": "Yes.", "look again": "Not quite.", "to do": "To do:", "tip": "Tip:", "note": "Note:",
+PREFIX = {"agrees": "Yes.", "look again": "Look again.", "to do": "To do:", "tip": "Tip:", "note": "Note:",
           "trap": "Trap:", "ok": "OK:", "open": ""}
 
 
@@ -158,8 +158,9 @@ def check_broad_early(series: list[Spectrum], lo: float = 1.0, hi: float = 6.5, 
     later = statistics.median(widths[1:]) if len(widths) > 1 else widths[0]
     if later > 0 and widths[0] > ratio * later:
         return Feedback("note", f"The {first.time_label} peaks are broader than later ones ({widths[0]:.1f} Hz vs "
-                                f"{later:.1f} Hz near {center:.2f} ppm). This is common while the sample dissolves "
-                                "and is not a chemical change by itself.")
+                                f"{later:.1f} Hz near {center:.2f} ppm). The peaks sharpen after day 1, most likely because "
+                                "the hydrogens on nitrogen swap with the acid's deuterium and stop splitting the "
+                                "peaks next to them. It is not breakdown.")
     return Feedback("ok", f"Line widths near {center:.2f} ppm: {widths[0]:.1f} Hz first, {later:.1f} Hz later.")
 
 
@@ -287,7 +288,7 @@ def check_reading(reading: dict, key: dict, prediction: dict | None = None) -> R
     return rep
 
 
-FIELD_WORDS = {"call": "call", "lost_ppm": "lost peaks", "new_ppm": "new peaks", "kept_ppm": "kept peaks",
+FIELD_WORDS = {"call": "decision", "lost_ppm": "lost peaks", "new_ppm": "new peaks", "kept_ppm": "kept peaks",
                "left": "how much is left", "product_guess": "product guess", "confidence": "confidence"}
 LEFT = ("most", "about half", "little or none", "unsure")
 HARSHER = ("98%", "81%", "same", "unsure")
@@ -307,7 +308,7 @@ def verdict_problems(verdict: dict, cases: list[str], names: dict | None = None)
         entry = verdict.get(case, {}) or {}
         call = plain_call(entry.get("call", ""))
         if call and call not in CALLS:
-            issues.append(f'The call for {who} is "{entry.get("call")}": write one of {quoted(CALLS)}.')
+            issues.append(f'The decision for {who} is "{entry.get("call")}": write one of {quoted(CALLS)}.')
         conf = str(entry.get("confidence", "")).strip().lower()
         if conf and conf not in CONFIDENCE:
             issues.append(f'The confidence for {who} is "{entry.get("confidence")}": write one of {quoted(CONFIDENCE)}.')
@@ -336,7 +337,7 @@ def verdict_notes(verdict: dict, cases: list[str], names: dict | None = None) ->
         empty = [FIELD_WORDS[k] for k in FIELD_WORDS if k in entry and _blank(entry[k])]
         if empty:
             notes.append(f"{who}: still empty: {', '.join(empty)}. An empty peak list is fine if there were "
-                         'none, and "unsure" is a fair call.')
+                         'none, and "unsure" is a fair answer.')
     return notes
 
 
@@ -371,20 +372,20 @@ def check_verdict(entry: dict, case: dict, tol: float | None = None, sample: str
     call = plain_call(entry.get("call", ""))
     expected = plain_call(case.get("call")) or None
     source = case.get("call_source", "the published finding")
-    check = f"Check your call against {case.get('check_against', 'the paper')}."
+    check = f"Check your decision against {case.get('check_against', 'the paper')}."
     if not call:
-        rep.append(Feedback("to do", f"No call yet: write one of {quoted(CALLS)}."))
+        rep.append(Feedback("to do", f"No decision yet: write one of {quoted(CALLS)}."))
     elif call == "unsure":
         settle = f" What settles it: {case['why']}." if case.get("why") else ""
-        rep.append(Feedback("open", "You answered unsure, which is a fair call on this data." + settle
+        rep.append(Feedback("open", "You answered unsure, which is a fair answer on this data." + settle
                             + ("" if expected else " " + check)))
     elif expected is None:
-        rep.append(Feedback("open", f"You called it '{call}'. {check} Your hand-in goes to review as you wrote it."))
+        rep.append(Feedback("open", f"You decided '{call}'. {check} Your hand-in goes to review as you wrote it."))
     elif call == expected:
         rep.append(Feedback("agrees", f"This matches {source}: '{expected}'."))
     else:
         why = f": {case['why']}" if case.get("why") else ""
-        rep.append(Feedback("look again", f"This differs from {source} ('{expected}'){why}. Look again at the "
+        rep.append(Feedback("look again", f"This differs from {source} ('{expected}'){why}. Go back over the "
                                           "peaks you listed as lost and kept. Your hand-in goes to review as you "
                                           "wrote it."))
 
@@ -435,9 +436,9 @@ def check_verdict(entry: dict, case: dict, tol: float | None = None, sample: str
     conf = str(entry.get("confidence", "")).strip().lower()
     if expected and call and call != "unsure":
         if conf == "high" and call != expected:
-            rep.append(Feedback("note", "You gave high confidence to a call that differs from the published one. Check your evidence again."))
+            rep.append(Feedback("note", "You gave high confidence to a decision that differs from the published one. Check your evidence again."))
         elif conf == "low" and call == expected:
-            rep.append(Feedback("note", "Your call matches the published one, so the evidence supports more than low confidence."))
+            rep.append(Feedback("note", "Your decision matches the published one, so the evidence supports more than low confidence."))
     return rep
 
 
@@ -466,9 +467,26 @@ def check_peak_list(mine: dict, case: dict, tol: float | None = None, labels: di
 
 
 def similarity_feedback(r: float, threshold: float = 0.95) -> Feedback:
+    """r: the correlation of two traces between 1 and 6.5 ppm (1 means the same shape)."""
     if r >= threshold:
-        return Feedback("agrees", f"Similarity {r:.3f}: your processing matches the instrument's.")
-    return Feedback("look again", f"Similarity {r:.3f}, below {threshold}. Check the phase and the axis direction.")
+        return Feedback("agrees", f"Similarity {r:.3f}, at or above {threshold}: the two traces have the same "
+                                  "shape, so your processing matches the instrument's.")
+    return Feedback("look again", f"Similarity {r:.3f}, below {threshold}: the two traces differ in shape. Check "
+                                  "the phase and the axis direction.")
+
+
+def line_feedback(diff: dict, label: str = "") -> Feedback:
+    """The largest difference in position between matching lines (from peaks.line_differences)."""
+    lead = f"{label}: " if label else ""
+    if diff.get("largest_ppm") is None:
+        return Feedback("look again", f"{lead}No lines found between 1 and 6.5 ppm to compare. Check the axis.")
+    d, at = diff["largest_ppm"], diff["at_ppm"]
+    text = (f"{lead}The largest difference between matching lines is {d:.4f} ppm, at the line near {at:.3f} ppm "
+            f"({diff['lines']} lines compared).")
+    if d <= 0.01:
+        return Feedback("agrees", text + " Every line sits within 0.01 ppm of the instrument's.")
+    return Feedback("look again", text + " That is more than 0.01 ppm: check the phase, the axis direction and "
+                                         "whether that line is a small peak only one of the two spectra shows.")
 
 
 def check_backbone(ppm, case: dict | None = None, tol: float | None = None) -> Feedback:

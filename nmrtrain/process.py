@@ -27,7 +27,12 @@ def line_broaden(dic: dict, fid: np.ndarray, lb_hz: float = 0.5) -> np.ndarray:
 
 
 def zero_fill(fid: np.ndarray, size: int = 65536) -> np.ndarray:
-    """Pad with zeros to `size` points: a finer ppm grid, no new information."""
+    """Pad with zeros to `size` points: a finer ppm grid, no new information. A size smaller than
+    the recording cannot pad anything, so the recording is kept as it is (with one line saying so)."""
+    if size < fid.size:
+        print(f"ZERO_FILL = {size} is smaller than the {fid.size} points in this recording, so there is "
+              f"nothing to pad. Using {fid.size} points. Pick 32768 or more.")
+        return fid
     return ng.proc_base.zf_size(fid, size)
 
 

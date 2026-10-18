@@ -31,10 +31,10 @@ def load(name: str, quiet: bool = False) -> dict:
     key.setdefault("check_against", CHECK_AGAINST.get(name, "the paper's tables"))
     if not quiet:
         if key["cases"]:
-            print(f"Published calls from {key.get('source', 'the paper')}.")
-            print(f"  Any other case: check your call against {key['check_against']}.")
+            print(f"Published decisions from {key.get('source', 'the paper')}.")
+            print(f"  Any other case: check your decision against {key['check_against']}.")
         else:
-            print(f"Check your call against {key['check_against']}.")
+            print(f"Check your decision against {key['check_against']}.")
     return key
 
 

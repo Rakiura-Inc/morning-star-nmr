@@ -223,7 +223,7 @@ def write_down(name: str, value, who: str, field: str, suggestion: list | None =
         return value
     text = str(value or "").strip()
     allowed = {"call": CALLS, "confidence": CONFIDENCE, "left": LEFT, "harsher": HARSHER}.get(field)
-    words = {"call": "the call", "confidence": "the confidence", "left": "how much is left",
+    words = {"call": "your decision", "confidence": "the confidence", "left": "how much is left",
              "harsher": "which acid was harsher",
              "product_guess": "the product guess", "note": "the note"}.get(field, field)
     if not text:
@@ -245,7 +245,7 @@ def write_down(name: str, value, who: str, field: str, suggestion: list | None =
     return value
 
 
-_TABLE_COLUMNS = [("call", "call"), ("lost_ppm", "lost peaks (ppm)"), ("new_ppm", "new peaks (ppm)"),
+_TABLE_COLUMNS = [("call", "decision"), ("lost_ppm", "lost peaks (ppm)"), ("new_ppm", "new peaks (ppm)"),
                   ("kept_ppm", "kept peaks (ppm)"), ("left", "how much is left"), ("product_guess", "product guess"),
                   ("confidence", "confidence"), ("note", "note")]
 

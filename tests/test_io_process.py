@@ -40,3 +40,15 @@ def test_zip_slip_is_refused(tmp_path):
         z.writestr("../../evil/acqus", "x")
     with pytest.raises(OSError):
         nt.io.experiment_dir(str(bad))
+
+
+def test_line_differences_against_the_instrument(aa_zip):
+    inst = nt.load_processed(aa_zip)
+    d = nt.peaks.line_differences(nt.process.process_fid(aa_zip), inst)
+    assert d["largest_ppm"] is not None and d["largest_ppm"] < 0.01 and d["lines"] >= 4
+
+
+def test_a_zero_fill_smaller_than_the_recording_does_not_crash(aa_zip, capsys):
+    own = nt.process.process_fid(aa_zip, size=8192)
+    assert "nothing to pad" in capsys.readouterr().out
+    assert own.y.size >= 32768 - 200
