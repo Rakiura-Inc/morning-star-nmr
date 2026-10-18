@@ -131,7 +131,7 @@ REPLICATION_COLUMNS = ["row_id", "dipeptide", "dipeptide_name", "acid_wt_pct", "
 
 def replication_row(sample: str, acid: str, entry: dict, time_points: list[str], matches: str = "unsure",
                     traps: int = 0, processing: str = "pdata", nucleus: str = "1H") -> dict:
-    """One row for the community replication table (see replication/README.md). Staff fill
+    """One row for the shared results table (see replication/README.md). Staff fill
     row_id and reviewed_on after review; the contributor is credited by name only on opt-in."""
     from .io import NAMES
     return {"row_id": "", "dipeptide": sample, "dipeptide_name": NAMES.get(sample, sample),

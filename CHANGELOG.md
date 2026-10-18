@@ -2,10 +2,22 @@
 
 ## 0.1.0 (2026-10-18, not published)
 - How much is left is measured against the acid peak in the same file, as a fraction of day 1
-  (`nt.peaks.against_acid`, `left_of_first`, `left_band`: most two thirds or more, about half one
-  third to two thirds, little or none under one third), in notebooks 01 and 02. Ala-Ala's 1.99 ppm
-  methyl: 100, 91, 57, 7, 0% of day 1. The share of all peaks from hydrogens on carbon is no longer
-  used for this, because that total shrinks as a molecule breaks down.
+  (`nt.peaks.against_acid`, `left_of_first`, `left_band`), in notebooks 01 and 02, at the two levels
+  NMR step 1 uses: under one third is "little or none" (clear loss), one third or more is "no clear
+  loss" (decide from the spectra). Ala-Ala's 1.99 ppm methyl: 100, 91, 57, 7, 0% of day 1, shown as
+  an approximate illustration with the step's caveat. The share of all peaks from hydrogens on carbon
+  is no longer used for this, because that total shrinks as a molecule breaks down.
+- Survives, as in the steps: the molecule's peaks keep their sizes relative to each other (not
+  against the acid peak, which collects the hydrogens the sample hands over), and no new peaks
+  appear. `nt.peaks.against_own_peak` and `second_peak_ppm`; notebook 01 prints Ala-Ala's 5.17 ppm
+  alpha against its 4.92 ppm alpha (100, 85, 69, 27, 5%), notebook 02 your peak against your next
+  tallest. Notebook 02's `SIGNAL_PPM` and `OTHER_PPM` are set per acid.
+- Gly-Gly in notebooks 01 and 02 in the steps' words: survives at least 4 months; the 4.77 ppm peak
+  weakens to about a third of day 1 against the acid peak, unexplained by the paper; its second line
+  from 5 weeks; the 4.33 ppm peak from about 8 days.
+- One match rule in notebooks 01 to 03: same pattern and within 0.05 ppm is a match, 0.05 to 0.1 ppm
+  needs the carbon spectra, over 0.1 ppm is not a match.
+- "Community replication table" is now "Shared results table" (README, replication/README.md).
 - Notebook 04 prints the acid peak in both spectra and the largest difference between matching
   lines (`nt.peaks.line_differences`, `nt.checks.line_feedback`) next to the similarity, and records
   a yes / no / unsure decision. A zero-fill below the recording's size no longer crashes; the hint

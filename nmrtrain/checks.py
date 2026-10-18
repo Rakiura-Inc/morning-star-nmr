@@ -290,7 +290,7 @@ def check_reading(reading: dict, key: dict, prediction: dict | None = None) -> R
 
 FIELD_WORDS = {"call": "decision", "lost_ppm": "lost peaks", "new_ppm": "new peaks", "kept_ppm": "kept peaks",
                "left": "how much is left", "product_guess": "product guess", "confidence": "confidence"}
-LEFT = ("most", "about half", "little or none", "unsure")
+LEFT = ("little or none", "no clear loss", "unsure")
 HARSHER = ("98%", "81%", "same", "unsure")
 
 

@@ -1,4 +1,4 @@
-"""Maintainer script for the community replication table (20 homodipeptides x 2 acids).
+"""Maintainer script for the shared results table (20 homodipeptides x 2 acids).
 
 Members never edit replications.csv. A maintainer runs this on rows from APPROVED hand-ins (each
 dipeptide hand-in saves handin/dipeptide-verdict/replication_rows.csv), then opens one pull request.

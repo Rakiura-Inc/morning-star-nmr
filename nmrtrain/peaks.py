@@ -108,11 +108,30 @@ def left_of_first(series: list, window: tuple, acid: tuple = ACID_AREA) -> list[
 
 
 def left_band(fraction: float) -> str:
-    """The three bands the steps use: most (two thirds or more), about half (one third to two
-    thirds), little or none (under one third)."""
-    if fraction >= 2 / 3:
-        return "most"
-    return "about half" if fraction >= 1 / 3 else "little or none"
+    """The two levels the steps use: under one third of day 1 is "little or none" (clear loss); one
+    third or more is "no clear loss" (decide from the spectra). Survivors drift between about half
+    and one and a half times their day 1 value against the acid peak, so only a fall below one third
+    counts as loss."""
+    return "no clear loss" if fraction >= 1 / 3 else "little or none"
+
+
+def against_own_peak(series: list, window: tuple, other: tuple) -> list[float]:
+    """One of the molecule's peaks (window, in ppm) against another of its own peaks (other) in the
+    same file, as a fraction of the same ratio in the first file. This does not use the acid peak,
+    which collects the hydrogens the sample hands over: a surviving molecule's peaks keep their
+    sizes relative to each other."""
+    ratios = []
+    for s in series:
+        ref = area(s, *other)
+        ratios.append(max(area(s, *window) / ref, 0.0) if ref > 0 else 0.0)
+    return [r / ratios[0] if ratios[0] > 0 else 0.0 for r in ratios]
+
+
+def second_peak_ppm(s: Spectrum, lo: float, hi: float, away_from: float, gap: float = 0.1,
+                    min_height: float = 0.03) -> float | None:
+    """The tallest signal between lo and hi ppm that sits at least `gap` ppm from `away_from`."""
+    found = [p for p in pick(s, lo, hi, min_height) if abs(p["ppm"] - away_from) >= gap]
+    return max(found, key=lambda p: p["height"])["ppm"] if found else None
 
 
 def line_differences(mine: Spectrum, theirs: Spectrum, lo: float = 1.0, hi: float = 6.5,

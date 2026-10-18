@@ -151,7 +151,7 @@ over four months, in Ala-Ala and in Gly-Gly alike), and aligning on it distorts 
 
 The keys and their sources: [`answer_keys/README.md`](answer_keys/README.md).
 
-## Community replication table
+## Shared results table
 
 `replication/` holds the schema, an empty `replications.csv`, and `update_table.py`. A maintainer
 runs the script on the lines from approved notebook 02 hand-ins to append them and regenerate the

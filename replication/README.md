@@ -1,4 +1,4 @@
-# Community replication table
+# Shared results table
 
 Twenty homodipeptides, two acid strengths: forty conditions. Each reviewed dipeptide hand-in
 (notebook 02) adds one row per acid to [`replications.csv`](replications.csv). GitHub shows the

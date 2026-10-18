@@ -262,8 +262,20 @@ def test_how_much_is_left_is_measured_against_the_acid_peak():
     gone = synthetic([(p, h * 0.1) for p, h in AA_1DAY], time="4Month")
     left = nt.peaks.left_of_first([first, half, gone], (1.75, 1.81))
     assert left[0] == 1.0 and abs(left[1] - 0.5) < 0.02 and abs(left[2] - 0.1) < 0.02
-    assert [nt.peaks.left_band(x) for x in (1.0, 0.67, 0.5, 0.34, 0.33, 0.0)] == [
-        "most", "most", "about half", "about half", "little or none", "little or none"]
+    assert [nt.peaks.left_band(x) for x in (1.5, 1.0, 0.5, 0.34, 0.33, 0.0)] == [
+        "no clear loss", "no clear loss", "no clear loss", "no clear loss", "little or none", "little or none"]
+    assert nt.checks.LEFT == ("little or none", "no clear loss", "unsure")
+
+
+def test_survival_compares_the_molecules_own_peaks():
+    first = synthetic(AA_1DAY)
+    # The whole molecule halves (both alphas together): its own peaks keep their sizes relative to each other.
+    both = synthetic([(p, h * 0.5) for p, h in AA_1DAY], time="8day")
+    # Only the alpha near 5.30 ppm falls: the ratio to the other alpha falls with it.
+    one = synthetic([(p, h * (0.2 if p > 5 else 1.0)) for p, h in AA_1DAY], time="4Month")
+    own = nt.peaks.against_own_peak([first, both, one], (5.25, 5.35), (4.65, 4.75))
+    assert own[0] == 1.0 and abs(own[1] - 1.0) < 0.02 and abs(own[2] - 0.2) < 0.02
+    assert abs(nt.peaks.second_peak_ppm(first, 1.0, 6.5, away_from=2.28) - 1.78) < 0.03
 
 
 def test_line_differences_find_the_largest_shift():
