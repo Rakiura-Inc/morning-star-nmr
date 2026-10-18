@@ -21,9 +21,10 @@ Without the helper, or when it is not signed in, offline mode keeps the same cal
 
 Modes (environment variable RAKIURA_LIVE):
     unset  live if the helper is installed and a key is available without a click
-           (RAKIURA_KEY, Colab's Secrets panel, or a key saved by an earlier sign-in); else offline
+           (RAKIURA_KEY, Colab's Secrets panel, or a key saved by an earlier sign-in); else offline.
+           connect(..., sign_in=True), the notebooks' Connect cell, also signs in with one click.
     "1"    live; signs in with one click if needed (prints a link)
-    "0"    offline, always
+    "0"    offline, always (even for sign_in=True)
 """
 from __future__ import annotations
 
@@ -99,33 +100,78 @@ def steps(notebook: str | None = None) -> dict:
     return entry
 
 
-def connect(notebook: str, repo: str = DEFAULT_REPO, handin_dir: str | None = None) -> str:
-    """Start this notebook's session. Returns "live" or "offline". Never raises."""
+NOT_CONNECTED = "Not connected to Rakiura. Your work stays on this computer."
+
+
+def connect(notebook: str, repo: str = DEFAULT_REPO, handin_dir: str | None = None,
+            sign_in: bool = False) -> str:
+    """Start this notebook's session. Returns "live" or "offline". Never raises.
+
+    By default it connects only when that needs no click (see the module notes), so the setup cell
+    never waits. ``sign_in=True`` (the Connect cell) also runs the helper's sign-in: it prints a
+    link, the member checks the code and clicks Allow. RAKIURA_LIVE=0 keeps both offline.
+    """
+    try:
+        return _connect(notebook, repo, handin_dir, sign_in)
+    except Exception:  # never stop a notebook over the connection
+        state.helper, state.mode = None, "offline"
+        print(NOT_CONNECTED)
+        return "offline"
+
+
+def _connect(notebook, repo, handin_dir, sign_in):
     state.notebook = notebook
     if handin_dir:
         state.handin_dir = os.path.abspath(handin_dir)
     os.makedirs(state.handin_dir, exist_ok=True)
     flag = os.environ.get("RAKIURA_LIVE")
     helper = None if flag == "0" else _import_helper()
-    if helper is not None and (flag == "1" or _key_without_click(helper)):
+    if helper is not None and (sign_in or flag == "1" or _key_without_click(helper)):
         try:
-            if helper.start(notebook=notebook, repo=repo):
+            # Quiet unless a sign-in link may be needed: the member reads one plain line below.
+            if helper.start(notebook=notebook, repo=repo, quiet=not (sign_in or flag == "1")):
                 state.helper, state.mode = helper, "live"
+                name = _member_name(helper)
+                print(f"Connected to Rakiura as {name}." if name else "Connected to Rakiura.")
                 return "live"
-        except Exception as exc:  # the helper never raises, but be safe
-            print(f"rakiura: {exc}")
-        print("rakiura: could not connect, so this session runs in offline mode.")
+        except Exception:
+            pass
+        finally:
+            _speak(helper)
     state.helper, state.mode = None, "offline"
-    hint = ("" if helper is None else
-            " To connect to Rakiura, run  nt.portal.go_live()")
-    print(f"Offline mode: progress is kept in {os.path.relpath(_log_path())}.{hint}")
+    if sign_in and helper is None and flag != "0":
+        print(NOT_CONNECTED + " The Rakiura helper is not installed: run the setup cell above, then this cell again.")
+    elif sign_in:
+        print(NOT_CONNECTED + " Run this cell again to try once more, or attach your files on the step page.")
+    else:
+        print(NOT_CONNECTED + " Run the Connect cell below to tick steps on Rakiura.")
     return "offline"
 
 
+def _speak(helper) -> None:
+    """Let the helper print its own lines again (ticks, staged files) after a quiet start."""
+    try:
+        helper._session.quiet = False
+    except Exception:
+        pass
+
+
+def _member_name(helper) -> str | None:
+    """The signed-in member's name, asked quietly; None if it cannot be had. Never the key."""
+    try:
+        helper._session.quiet = True
+        info = helper.me(show=False) or {}
+        name = (info.get("member") or {}).get("name")
+        return name if isinstance(name, str) and name.strip() else None
+    except Exception:
+        return None
+    finally:
+        _speak(helper)
+
+
 def go_live(notebook: str | None = None, repo: str = DEFAULT_REPO) -> str:
-    """Sign in now (one click) and switch this session to live."""
-    os.environ["RAKIURA_LIVE"] = "1"
-    return connect(notebook or state.notebook or "notebook.ipynb", repo)
+    """Sign in now (one click) and switch this session to live. Same as the Connect cell."""
+    return connect(notebook or state.notebook or "notebook.ipynb", repo, sign_in=True)
 
 
 def _log_path() -> str:

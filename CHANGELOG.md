@@ -1,6 +1,10 @@
 # Changelog
 
 ## 0.1.0 (2026-10-18, not published)
+- Each notebook has a Connect to Rakiura cell under the setup cell (`nt.portal.connect(NOTEBOOK,
+  sign_in=True)`): it prints a sign-in link, the member checks the code and clicks Allow. The setup
+  cell still connects only without a click, and now prints "Connected to Rakiura as <name>." or
+  "Not connected to Rakiura. Your work stays on this computer. ..."
 - Each notebook's setup cell installs the Rakiura helper from GitHub
   (`Rakiura-Inc/rakiura-py`), so a member can connect in Colab; `make local` installs it too.
 - Every question is scaffolded: a What you need cell (facts, a figure or table, the matching step by

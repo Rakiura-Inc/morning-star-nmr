@@ -84,6 +84,92 @@ def test_every_setup_cell_installs_the_helper_from_github():
         assert line in setup and "morning-star-nmr@main" in setup, path
 
 
+# --- the Connect cell, with a stand-in helper -------------------------------------------------
+
+def _fake_helper(monkeypatch, start=True, name="Test Member", boom=False):
+    import sys
+    import types
+    calls = []
+    mod = types.ModuleType("rakiura")
+    mod._session = types.SimpleNamespace(quiet=False)
+
+    def _start(**kw):
+        calls.append(("start", kw))
+        if boom:
+            raise RuntimeError("network down")
+        return start
+
+    mod.start = _start
+    mod.me = lambda show=True: {"member": {"name": name}, "lab": {"name": "Lab"}}
+    mod.done = mod.stage_text = mod.submit = lambda *a, **k: True
+    mod._colab_secret = lambda: None
+    mod._credentials_path = lambda: "/nonexistent/creds"
+    monkeypatch.setitem(sys.modules, "rakiura", mod)
+    monkeypatch.delenv("RAKIURA_LIVE", raising=False)
+    return mod, calls
+
+
+def test_setup_cell_does_not_start_a_sign_in_without_a_key(monkeypatch, capsys):
+    _, calls = _fake_helper(monkeypatch)
+    assert nt.portal.connect("nb.ipynb") == "offline"
+    assert calls == []
+    assert capsys.readouterr().out.strip() == ("Not connected to Rakiura. Your work stays on this computer. "
+                                               "Run the Connect cell below to tick steps on Rakiura.")
+
+
+def test_connect_cell_signs_in_and_names_the_member(monkeypatch, capsys):
+    mod, calls = _fake_helper(monkeypatch)
+    assert nt.portal.connect("nb.ipynb", sign_in=True) == "live"
+    assert calls == [("start", {"notebook": "nb.ipynb", "repo": nt.portal.DEFAULT_REPO, "quiet": False})]
+    out = capsys.readouterr().out
+    assert out.strip() == "Connected to Rakiura as Test Member."
+    assert "rknb_" not in out and mod._session.quiet is False
+
+
+def test_setup_cell_connects_quietly_with_a_key(monkeypatch, capsys):
+    _, calls = _fake_helper(monkeypatch)
+    monkeypatch.setenv("RAKIURA_KEY", KEY)
+    assert nt.portal.connect("nb.ipynb") == "live"
+    assert calls[0][1]["quiet"] is True
+    out = capsys.readouterr().out
+    assert out.strip() == "Connected to Rakiura as Test Member." and KEY not in out
+
+
+@pytest.mark.parametrize("kw", [{"start": False}, {"boom": True}])
+def test_connect_cell_never_raises(monkeypatch, capsys, kw):
+    _fake_helper(monkeypatch, **kw)
+    assert nt.portal.connect("nb.ipynb", sign_in=True) == "offline"
+    assert capsys.readouterr().out.startswith("Not connected to Rakiura. Your work stays on this computer.")
+    assert nt.portal.state.mode == "offline"
+
+
+def test_connect_cell_stays_offline_when_forced(monkeypatch, capsys):
+    _, calls = _fake_helper(monkeypatch)
+    monkeypatch.setenv("RAKIURA_LIVE", "0")
+    assert nt.portal.connect("nb.ipynb", sign_in=True) == "offline"
+    assert calls == []
+
+
+def test_connect_cell_without_the_helper_says_what_to_do(monkeypatch, capsys):
+    monkeypatch.setattr(nt.portal, "_import_helper", lambda: None)
+    monkeypatch.delenv("RAKIURA_LIVE", raising=False)
+    assert nt.portal.connect("nb.ipynb", sign_in=True) == "offline"
+    assert "run the setup cell above" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("path", sorted(__import__("glob").glob(
+    os.path.join(os.path.dirname(__file__), "..", "notebooks", "[0-9][0-9]_*.ipynb"))), ids=os.path.basename)
+def test_every_notebook_has_the_connect_cell_after_setup(path):
+    cells = json.load(open(path))["cells"]
+    box, code = "".join(cells[2]["source"]), "".join(cells[3]["source"])
+    assert "nt.portal.connect(NOTEBOOK)" in "".join(cells[1]["source"])   # the setup cell never waits
+    assert box.startswith("> **CONNECT TO RAKIURA (optional, recommended)**")
+    for part in ("**What it does:**", "**How:**", "**Skipping it is fine:**", "Allow", "RAKIURA_KEY",
+                 "once per session", "Nothing is sent until you connect"):
+        assert part in box, part
+    assert "nt.portal.connect(NOTEBOOK, sign_in=True)" in code
+
+
 def test_another_package_named_rakiura_is_not_used(monkeypatch, capsys):
     import sys
     import types
@@ -111,6 +197,13 @@ class Portal(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
+
+    def do_GET(self):
+        Portal.received.append((self.path, None, self.headers.get("Authorization")))
+        if self.path.endswith("/me"):
+            return self._reply({"ok": True, "member": {"name": "Test Member"},
+                                "lab": {"name": "Morning Star Missions"}, "deliverables": []})
+        self._reply({"ok": False})
 
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
@@ -153,6 +246,7 @@ def portal_server(tmp_path, monkeypatch):
 
 def test_live_mode_ticks_stages_and_submits_through_the_helper(portal_server, capsys):
     assert nt.portal.connect("notebooks/01_capstone_ala_ala_vs_gly_gly.ipynb") == "live"
+    assert capsys.readouterr().out.strip() == "Connected to Rakiura as Test Member."
     nt.record.handin("capstone-verdict", figures={"stack": _fig()}, verdict={"AA": {"call": "degrades"}},
                      numbers={"AA_call": "degrades"})
     paths = [p for p, _, _ in Portal.received]
@@ -176,4 +270,4 @@ def test_without_a_key_the_helper_is_not_asked_to_sign_in(monkeypatch, capsys):
     monkeypatch.delenv("RAKIURA_LIVE", raising=False)
     monkeypatch.setenv("RAKIURA_CREDENTIALS", "/nonexistent/creds")
     assert nt.portal.connect("nb.ipynb") == "offline"
-    assert "nt.portal.go_live()" in capsys.readouterr().out
+    assert "Run the Connect cell below" in capsys.readouterr().out

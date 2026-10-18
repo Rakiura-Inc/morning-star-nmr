@@ -89,8 +89,8 @@ Rakiura helper (about 30 s):
 ```
 
 Pin `nmrtrain` to a release commit with `scripts/set_repo.py OWNER/NAME --pin <sha>`. A member
-connects with `nt.portal.go_live()` and one click on Allow, again in each new Colab session (or
-adds a `RAKIURA_KEY` secret in Colab's Secrets panel). Not connected, the notebook runs in offline
+connects by running the Connect to Rakiura cell under the setup cell and clicking Allow on the link
+it prints, again in each new Colab session (or adds a `RAKIURA_KEY` secret in Colab's Secrets panel). Not connected, the notebook runs in offline
 mode and members attach the files from `handin/` on the step page.
 
 ## Connecting to Rakiura
@@ -100,14 +100,16 @@ mode and members attach the files from `handin/` on the step page.
 
 | Call in the notebook | Live (helper installed and connected) | Offline |
 |---|---|---|
-| `nt.portal.connect(NOTEBOOK)` | `rakiura.start(notebook=..., repo=...)`: opens a run with the notebook path, repository, commit and where it runs | prints one line |
+| `nt.portal.connect(NOTEBOOK)` | `rakiura.start(notebook=..., repo=...)`: opens a run with the notebook path, repository, commit and where it runs; prints "Connected to Rakiura as <name>." | prints "Not connected to Rakiura. ..." |
+| `nt.portal.connect(NOTEBOOK, sign_in=True)` | the Connect cell: the same, and signs in with one click if no key is saved (prints a link) | as above |
 | `nt.portal.done(part, figures, numbers)` | `rakiura.done(...)`: ticks the checklist item linked to that part, stages figures and up to 20 numbers | logs to `handin/rakiura_progress.json` |
 | `nt.record.handin(part, ...)` | the above, plus `rakiura.stage_text(verdict.json, step=...)` when a step id is set | saves PNGs and `verdict.json` in `handin/<part>/` |
 | `nt.portal.submit()` | `rakiura.submit()`: sends the step for review; never automatic | says nothing was sent |
 
 Live mode starts on its own when the helper is installed and a key is available without a click
-(`RAKIURA_KEY`, Colab Secrets, or a key saved by an earlier sign-in). `nt.portal.go_live()` (or
-`RAKIURA_LIVE=1`) signs in with one click; `RAKIURA_LIVE=0` forces offline.
+(`RAKIURA_KEY`, Colab Secrets, or a key saved by an earlier sign-in). The Connect cell
+(`sign_in=True`, also `nt.portal.go_live()` or `RAKIURA_LIVE=1`) signs in with one click; the setup
+cell never waits for one. `RAKIURA_LIVE=0` forces offline, Connect cell included.
 
 **Part names** (link each to a checklist item in Rakiura under Settings > Notebook links; the
 notebooks carry no Rakiura ids). Full list with descriptions: `notebooks/rakiura_steps.json`.
