@@ -1,0 +1,11 @@
+nmr_data/
+handin/
+**/nmr_data/
+**/handin/
+.ipynb_checkpoints/
+__pycache__/
+*.egg-info/
+.venv/
+.pytest_cache/
+build/
+dist/

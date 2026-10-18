@@ -1,0 +1,85 @@
+cff-version: 1.2.0
+message: "If you use these notebooks, please cite the datasets and papers below."
+title: "nmrtrain: Morning Star Missions NMR training notebooks"
+authors:
+  - name: "Rakiura"
+version: 0.1.0
+date-released: 2026-10-18
+repository-code: "https://github.com/Rakiura-Inc/morning-star-nmr"
+license: MIT
+references:
+  - type: dataset
+    title: "General Instability of Dipeptides in Concentrated Sulfuric Acid as Relevant for the Venus Cloud Habitability (supplementary datasets)"
+    authors:
+      - family-names: Petkowski
+        given-names: Janusz J.
+      - family-names: Seager
+        given-names: Maxwell D.
+      - family-names: Bains
+        given-names: William
+      - family-names: Seager
+        given-names: Sara
+    doi: 10.5281/zenodo.11223995
+    license: CC-BY-4.0
+    year: 2024
+  - type: article
+    title: "General instability of dipeptides in concentrated sulfuric acid as relevant for the Venus cloud habitability"
+    authors:
+      - family-names: Petkowski
+        given-names: Janusz J.
+      - family-names: Seager
+        given-names: Maxwell D.
+      - family-names: Bains
+        given-names: William
+      - family-names: Seager
+        given-names: Sara
+    journal: "Scientific Reports"
+    volume: 14
+    start: 17083
+    year: 2024
+    doi: 10.1038/s41598-024-67342-w
+  - type: dataset
+    title: "Stability of Biogenic Amino Acids in Concentrated Sulfuric Acid: Implications for the Habitability of Venus' Clouds (supplementary datasets)"
+    authors:
+      - family-names: Seager
+        given-names: Maxwell D.
+      - family-names: Seager
+        given-names: Sara
+      - family-names: Bains
+        given-names: William
+      - family-names: Petkowski
+        given-names: Janusz J.
+    doi: 10.5281/zenodo.8381013
+    license: CC-BY-4.0
+    year: 2023
+  - type: article
+    title: "Stability of 20 Biogenic Amino Acids in Concentrated Sulfuric Acid: Implications for the Habitability of Venus' Clouds"
+    authors:
+      - family-names: Seager
+        given-names: Maxwell D.
+      - family-names: Seager
+        given-names: Sara
+      - family-names: Bains
+        given-names: William
+      - family-names: Petkowski
+        given-names: Janusz J.
+    journal: "Astrobiology"
+    volume: 24
+    start: 386
+    year: 2024
+  - type: dataset
+    title: "Mechanism for Peptide Bond Solvolysis in 98% w/w Concentrated Sulfuric Acid (supplementary datasets 1 to 5)"
+    authors:
+      - family-names: Petkowski
+        given-names: Janusz J.
+      - family-names: Seager
+        given-names: Maxwell D.
+      - family-names: Bains
+        given-names: William
+      - family-names: Grimes
+        given-names: John H.
+      - family-names: Seager
+        given-names: Sara
+    doi: 10.5281/zenodo.11122291
+    license: CC-BY-4.0
+    year: 2024

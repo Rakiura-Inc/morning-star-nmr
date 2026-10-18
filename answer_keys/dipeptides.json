@@ -1,0 +1,26 @@
+{
+ "step": "Judge one dipeptide at both acid strengths",
+ "version": "0.2.0",
+ "status": "published calls only",
+ "source": "Petkowski et al. 2024, Sci. Rep. 14, 17083",
+ "data": "Zenodo 10.5281/zenodo.11223995, Supplementary dataset S1; acid K = 98% w/w, H = 81% w/w D2SO4",
+ "other_cases": "Not keyed. Check your call against Table 1 (81%) and Table 2 (98%) of the paper.",
+ "cases": {
+  "AA-K": {
+   "sample": "AA",
+   "acid": "K",
+   "first": "1day",
+   "last": "4Month",
+   "call": "degrades",
+   "call_source": "the published finding (Petkowski et al. 2024, Sci. Rep. 14, 17083)"
+  },
+  "GG-K": {
+   "sample": "GG",
+   "acid": "K",
+   "first": "1day",
+   "last": "4Month",
+   "call": "survives",
+   "call_source": "the published finding (Petkowski et al. 2024, Sci. Rep. 14, 17083)"
+  }
+ }
+}

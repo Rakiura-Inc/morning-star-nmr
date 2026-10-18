@@ -1,0 +1,89 @@
+{
+ "step": "Bootcamp: Reproduce the Ala-Ala verdict (Ala-Ala vs Gly-Gly in 98% sulfuric acid)",
+ "version": "0.2.0",
+ "status": "published calls only",
+ "source": "Petkowski et al. 2024, Sci. Rep. 14, 17083 (calls); Petkowski et al., ACS Omega 2025 (the Ala-Ala product)",
+ "data": "Zenodo 10.5281/zenodo.11223995, Supplementary dataset S1, samples AA and GG, acid K (98% w/w D2SO4)",
+ "prediction": {
+  "AA_signals": {
+   "label": "Ala-Ala C-H signals",
+   "answer": 4,
+   "why": "two methyls and two alpha-H, one of each per residue"
+  },
+  "AA_methyl_ppm": {
+   "label": "Ala-Ala methyl",
+   "band": [
+    1.9,
+    2.2
+   ],
+   "water": [
+    1.2,
+    1.8
+   ]
+  },
+  "AA_alpha_ppm": {
+   "label": "Ala-Ala alpha-H",
+   "band": [
+    4.8,
+    5.3
+   ],
+   "water": [
+    3.8,
+    4.6
+   ]
+  },
+  "GG_signals": {
+   "label": "Gly-Gly C-H signals",
+   "answer": 2,
+   "why": "one CH2 per residue"
+  },
+  "GG_ch2_ppm": {
+   "label": "Gly-Gly CH2",
+   "band": [
+    4.5,
+    4.9
+   ],
+   "water": [
+    3.7,
+    4.2
+   ]
+  }
+ },
+ "cases": {
+  "AA": {
+   "sample": "AA",
+   "acid": "K",
+   "call": "degrades",
+   "call_source": "the published finding (Petkowski et al. 2024, Sci. Rep. 14, 17083)",
+   "product_words": [
+    "alaninamide",
+    "alanine amide",
+    "alanamide",
+    "ala-nh2",
+    "alaninamid"
+   ],
+   "close_words": [
+    "alanine"
+   ],
+   "close_message": "Free alanine is what water would give. In 98% acid the mechanism study reports alaninamide: one alanine keeps the amide end. See Look closer for its reference spectrum.",
+   "product": "alaninamide (alanine with an amide end)",
+   "product_source": "the mechanism study (Petkowski et al., ACS Omega 2025, Mechanism for peptide bond solvolysis in 98% w/w concentrated sulfuric acid; reference spectra on Zenodo 10.5281/zenodo.11122291)"
+  },
+  "GG": {
+   "sample": "GG",
+   "acid": "K",
+   "call": "survives",
+   "call_source": "the published finding (Petkowski et al. 2024, Sci. Rep. 14, 17083)",
+   "product_words": [
+    "none",
+    "no product",
+    "nothing",
+    "n/a",
+    "unchanged",
+    "no change"
+   ],
+   "product": "none: Gly-Gly is still there",
+   "product_source": "the published finding (Petkowski et al. 2024, Sci. Rep. 14, 17083)"
+  }
+ }
+}

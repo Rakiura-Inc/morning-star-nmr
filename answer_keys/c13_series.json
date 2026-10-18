@@ -1,0 +1,21 @@
+{
+ "step": "Extra: Read a carbon spectrum (13C series)",
+ "version": "0.2.0",
+ "status": "published calls only",
+ "source": "Petkowski et al. 2024, Sci. Rep. 14, 17083",
+ "data": "Zenodo 10.5281/zenodo.11223995, Supplementary dataset S1, AA and GG, acid K, 13C",
+ "cases": {
+  "AA": {
+   "sample": "AA",
+   "acid": "K",
+   "call": "degrades",
+   "call_source": "the published finding (Petkowski et al. 2024, Sci. Rep. 14, 17083)"
+  },
+  "GG": {
+   "sample": "GG",
+   "acid": "K",
+   "call": "survives",
+   "call_source": "the published finding (Petkowski et al. 2024, Sci. Rep. 14, 17083)"
+  }
+ }
+}

@@ -1,0 +1,21 @@
+{
+  "_about": "Columns of replication/replications.csv, one row per reviewed hand-in (or one Rakiura reference row per condition). Public data only: rows from a lab's unpublished molecules never enter this file.",
+  "columns": [
+    {"name": "row_id", "type": "string", "rule": "assigned by update_table.py: R-0001, R-0002, ...; reference rows are REF-<dipeptide>-<acid>"},
+    {"name": "dipeptide", "type": "string", "rule": "two-letter code, one of the 20 homodipeptides (AA, CC, ... YY)"},
+    {"name": "dipeptide_name", "type": "string", "rule": "for example Ala-Ala"},
+    {"name": "acid_wt_pct", "type": "integer", "rule": "98 or 81"},
+    {"name": "acid_code", "type": "string", "rule": "K (98% w/w D2SO4) or H (81% w/w D2SO4)"},
+    {"name": "nucleus", "type": "string", "rule": "1H or 13C"},
+    {"name": "time_points", "type": "string", "rule": "first;last, for example 1day;4Month"},
+    {"name": "processing", "type": "string", "rule": "pdata (instrument-processed) or raw (processed by the member)"},
+    {"name": "tool", "type": "string", "rule": "nmrtrain <commit>, or NMRium"},
+    {"name": "verdict", "type": "string", "rule": "survives, degrades, side chain modified, or unsure"},
+    {"name": "main_product", "type": "string", "rule": "optional, in words"},
+    {"name": "matches_published", "type": "string", "rule": "yes, no, or unsure (unsure where no published call exists)"},
+    {"name": "traps_flagged", "type": "integer", "rule": "how many trap checks fired in the member's run"},
+    {"name": "dataset_doi", "type": "string", "rule": "10.5281/zenodo.11223995"},
+    {"name": "reviewed_on", "type": "date", "rule": "YYYY-MM-DD, the day a reviewer approved the hand-in"},
+    {"name": "contributor", "type": "string", "rule": "display name only with the member's opt-in; otherwise Rakiura member"}
+  ]
+}

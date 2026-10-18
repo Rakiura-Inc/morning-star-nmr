@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nmrtrain"
+version = "0.1.0"
+description = "Plumbing for the Morning Star Missions NMR training notebooks: fetch public Zenodo spectra, process, plot, check."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Rakiura" }]
+classifiers = ["License :: OSI Approved :: MIT License"]
+dependencies = [
+  "numpy>=1.24",
+  "scipy>=1.10",
+  "matplotlib>=3.7",
+  "nmrglue>=0.10",
+]
+
+[project.optional-dependencies]
+explore = ["plotly>=5"]
+notebooks = ["jupyterlab>=4", "ipykernel>=6"]
+dev = ["pytest>=7", "nbclient>=0.9", "nbformat>=5.9", "ipykernel>=6"]
+
+[tool.setuptools]
+packages = ["nmrtrain", "nmrtrain.answer_keys"]
+
+[tool.setuptools.package-dir]
+"nmrtrain" = "nmrtrain"
+"nmrtrain.answer_keys" = "answer_keys"
+
+[tool.setuptools.package-data]
+"nmrtrain" = ["manifests/*.json"]
+"nmrtrain.answer_keys" = ["*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
