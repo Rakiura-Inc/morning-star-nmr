@@ -3,13 +3,14 @@
 Members never edit replications.csv. A maintainer runs this on rows from APPROVED hand-ins (each
 dipeptide hand-in saves handin/dipeptide-verdict/replication_rows.csv), then opens one pull request.
 
-    python replication/update_table.py --reference                    # add the Rakiura reference rows
-    python replication/update_table.py --rows a.csv b.csv --reviewed-on 2026-11-02 [--credit "A. Name"]
-    python replication/update_table.py --grid-only                    # just regenerate the README grid
+    uv run replication/update_table.py --reference                    # add the Rakiura reference rows
+    uv run replication/update_table.py --rows a.csv b.csv --reviewed-on 2026-11-02 [--credit "A. Name"]
+    uv run replication/update_table.py --grid-only                    # just regenerate the README grid
 
 Rows are validated against schema.json. Public data only: any row whose dataset is not the public
 dipeptide record is refused.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -17,29 +18,28 @@ import csv
 import datetime as dt
 import json
 import os
-import sys
+from pathlib import Path
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HERE, ".."))
+import nmrtrain as nt
 
-TABLE = os.path.join(HERE, "replications.csv")
-README = os.path.join(HERE, "README.md")
-SCHEMA = json.load(open(os.path.join(HERE, "schema.json")))
+HERE = Path(__file__).resolve().parent
+TABLE = HERE / "replications.csv"
+README = HERE / "README.md"
+SCHEMA = json.loads((HERE / "schema.json").read_text())
 COLUMNS = [c["name"] for c in SCHEMA["columns"]]
-DIPEPTIDES = ["AA", "CC", "DD", "EE", "FF", "GG", "HH", "II", "KK", "LL", "MM", "NN", "PP", "QQ", "RR", "SS",
-              "TT", "VV", "WW", "YY"]
+DIPEPTIDES = [code for code in nt.io.NAMES if len(code) == 2]  # the 20 homodipeptides, AA to YY
 VERDICTS = {"survives", "degrades", "side chain modified", "unsure"}
-PUBLIC_DOI = "10.5281/zenodo.11223995"
+PUBLIC_DOI = nt.record.DIPEPTIDE_DOI
 BEGIN, END = "<!-- grid:begin -->", "<!-- grid:end -->"
 
 
 def read_table() -> list[dict]:
-    with open(TABLE, newline="") as fh:
+    with TABLE.open(newline="") as fh:
         return list(csv.DictReader(fh))
 
 
 def write_table(rows: list[dict]) -> None:
-    with open(TABLE, "w", newline="") as fh:
+    with TABLE.open("w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=COLUMNS)
         w.writeheader()
         w.writerows(rows)
@@ -68,7 +68,6 @@ def next_id(rows: list[dict]) -> str:
 
 
 def add_reference(rows: list[dict]) -> int:
-    import nmrtrain as nt
     key = nt.answers.load("dipeptides", quiet=True)
     have = {r["row_id"] for r in rows}
     added = 0
@@ -76,13 +75,25 @@ def add_reference(rows: list[dict]) -> int:
         rid = f"REF-{cid}"
         if rid in have:
             continue
-        verdict = c["call"]   # the key holds published calls only
-        rows.append({"row_id": rid, "dipeptide": c["sample"], "dipeptide_name": nt.io.NAMES[c["sample"]],
-                     "acid_wt_pct": {"K": 98, "H": 81}[c["acid"]], "acid_code": c["acid"], "nucleus": "1H",
-                     "time_points": f"{c['first']};{c['last']}", "processing": "pdata",
-                     "tool": f"nmrtrain key {key['version']} (published calls only)", "verdict": verdict,
-                     "main_product": "", "matches_published": "yes", "traps_flagged": 0,
-                     "dataset_doi": PUBLIC_DOI, "reviewed_on": "", "contributor": "Rakiura reference"})
+        verdict = c["call"]  # the key holds published calls only
+        rows.append({
+            "row_id": rid,
+            "dipeptide": c["sample"],
+            "dipeptide_name": nt.io.NAMES[c["sample"]],
+            "acid_wt_pct": nt.io.ACID_WT_PCT[c["acid"]],
+            "acid_code": c["acid"],
+            "nucleus": "1H",
+            "time_points": f"{c['first']};{c['last']}",
+            "processing": "pdata",
+            "tool": f"nmrtrain key {key['version']} (published calls only)",
+            "verdict": verdict,
+            "main_product": "",
+            "matches_published": "yes",
+            "traps_flagged": 0,
+            "dataset_doi": PUBLIC_DOI,
+            "reviewed_on": "",
+            "contributor": "Rakiura reference",
+        })
         added += 1
     return added
 
@@ -90,7 +101,7 @@ def add_reference(rows: list[dict]) -> int:
 def add_rows(rows: list[dict], files: list[str], reviewed_on: str, credit: str | None) -> int:
     added = 0
     for path in files:
-        with open(path, newline="") as fh:
+        with Path(path).open(newline="") as fh:
             for row in csv.DictReader(fh):
                 row = {k: (row.get(k) or "") for k in COLUMNS}
                 row["reviewed_on"] = reviewed_on
@@ -98,7 +109,8 @@ def add_rows(rows: list[dict], files: list[str], reviewed_on: str, credit: str |
                 row["row_id"] = next_id(rows)
                 errs = validate(row)
                 if errs:
-                    raise SystemExit(f"{path}: refused ({'; '.join(errs)})")
+                    msg = f"{path}: refused ({'; '.join(errs)})"
+                    raise SystemExit(msg)
                 rows.append(row)
                 added += 1
     return added
@@ -124,15 +136,14 @@ def grid(rows: list[dict]) -> str:
             cells.append(text)
         lines.append(f"| {d} | {cells[0]} | {cells[1]} |")
     people = len({r["contributor"] for r in members})
-    head = (f"{covered} of 40 conditions replicated by {people} contributor(s). "
-            f"Updated {dt.date.today().isoformat()}.")
+    head = f"{covered} of 40 conditions replicated by {people} contributor(s). Updated {dt.date.today().isoformat()}."
     return head + "\n\n" + "\n".join(lines)
 
 
 def write_grid(rows: list[dict]) -> None:
-    text = open(README).read()
+    text = README.read_text()
     a, b = text.index(BEGIN) + len(BEGIN), text.index(END)
-    open(README, "w").write(text[:a] + "\n" + grid(rows) + "\n" + text[b:])
+    README.write_text(text[:a] + "\n" + grid(rows) + "\n" + text[b:])
 
 
 def main() -> None:

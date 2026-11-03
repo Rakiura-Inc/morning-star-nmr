@@ -1,16 +1,19 @@
 """Fetching: manifest selection, one range request per spectrum, CRC checks, cache, fallbacks."""
+
 import io
-import os
 import re
 import threading
 import zipfile
 import zlib
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
+from typing import ClassVar
 
 import pytest
 
 import nmrtrain as nt
-from conftest import AA_1DAY, FIXTURES
+
+from .helpers import AA_1DAY, FIXTURES, ROOT
 
 
 def test_manifests_cover_the_three_records():
@@ -41,7 +44,7 @@ def test_doi_is_accepted_as_record():
 
 
 def _archive(tmp_path):
-    inner = open(os.path.join(FIXTURES, AA_1DAY), "rb").read()
+    inner = (FIXTURES / AA_1DAY).read_bytes()
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as z:
         z.writestr("readme.txt", "padding " * 100)
@@ -49,16 +52,28 @@ def _archive(tmp_path):
     data = buf.getvalue()
     with zipfile.ZipFile(io.BytesIO(data)) as z:
         zi = z.getinfo(f"Suplementary dataset S1/{AA_1DAY}")
-    member = {"path": zi.filename, "name": AA_1DAY, "offset": zi.header_offset, "compress_size": zi.compress_size,
-              "size": zi.file_size, "compress_type": 0, "crc": zi.CRC, "sample": "AA", "acid": "K",
-              "time": "1day", "time_group": "1day", "nucleus": "1H", "repeat": False}
+    member = {
+        "path": zi.filename,
+        "name": AA_1DAY,
+        "offset": zi.header_offset,
+        "compress_size": zi.compress_size,
+        "size": zi.file_size,
+        "compress_type": 0,
+        "crc": zi.CRC,
+        "sample": "AA",
+        "acid": "K",
+        "time": "1day",
+        "time_group": "1day",
+        "nucleus": "1H",
+        "repeat": False,
+    }
     return data, member
 
 
 class Zenodo(BaseHTTPRequestHandler):
     data = b""
     ranges = True
-    requests: list = []
+    requests: ClassVar[list] = []
 
     def log_message(self, *a):
         pass
@@ -69,7 +84,7 @@ class Zenodo(BaseHTTPRequestHandler):
         if rng and Zenodo.ranges:
             a, b = map(int, re.match(r"bytes=(\d+)-(\d+)", rng).groups())
             b = min(b, len(self.data) - 1)
-            body = self.data[a:b + 1]
+            body = self.data[a : b + 1]
             self.send_response(206)
             self.send_header("Content-Range", f"bytes {a}-{b}/{len(self.data)}")
         else:
@@ -95,7 +110,7 @@ def fake_zenodo(tmp_path, monkeypatch):
 
 def test_one_range_request_per_spectrum_then_cache(fake_zenodo, capsys):
     path = nt.data.fetch_member("11223995", fake_zenodo)
-    assert os.path.getsize(path) == fake_zenodo["size"]
+    assert Path(path).stat().st_size == fake_zenodo["size"]
     assert len(Zenodo.requests) == 1 and Zenodo.requests[0].startswith("bytes=")
     nt.data.fetch_member("11223995", fake_zenodo)
     assert len(Zenodo.requests) == 1  # cached, CRC verified, no second request
@@ -110,14 +125,14 @@ def test_a_changed_archive_is_never_trusted(fake_zenodo):
 def test_falls_back_to_the_whole_archive_when_ranges_are_refused(fake_zenodo, capsys):
     Zenodo.ranges = False
     path = nt.data.fetch_member("11223995", fake_zenodo)
-    assert zlib.crc32(open(path, "rb").read()) & 0xFFFFFFFF == fake_zenodo["crc"]
+    assert zlib.crc32(Path(path).read_bytes()) & 0xFFFFFFFF == fake_zenodo["crc"]
     assert "whole archive" in capsys.readouterr().out
 
 
 def test_local_copy_is_used_before_the_network(tmp_path, monkeypatch, fake_zenodo):
     folder = tmp_path / "mirror"
     folder.mkdir()
-    (folder / AA_1DAY).write_bytes(open(os.path.join(FIXTURES, AA_1DAY), "rb").read())
+    (folder / AA_1DAY).write_bytes((FIXTURES / AA_1DAY).read_bytes())
     monkeypatch.setenv("NMRTRAIN_LOCAL", str(folder))
     nt.data._local_index.cache_clear()
     nt.data.fetch_member("11223995", fake_zenodo)
@@ -135,7 +150,8 @@ def test_fetch_prints_the_citation(fake_zenodo, monkeypatch, capsys):
 
 
 def _no_network(*a, **k):
-    raise AssertionError("the network was used")
+    msg = "the network was used"
+    raise AssertionError(msg)
 
 
 def test_hosted_alanine_files_match_the_manifest():
@@ -143,31 +159,33 @@ def test_hosted_alanine_files_match_the_manifest():
     rows = nt.data.select(record, "ALA", "K", "1H")
     assert sorted(m["name"] for m in rows) == sorted(names)
     for m in rows:
-        assert nt.data._crc_ok(os.path.join(nt.data.REPO_DATA, folder, m["name"]), m)
+        assert nt.data._crc_ok(Path(nt.data.REPO_DATA, folder, m["name"]), m)
 
 
 def test_hosted_alanine_loads_from_the_checkout_before_the_network(monkeypatch):
     monkeypatch.setattr(nt.data, "_get", _no_network)
     paths = nt.data.fetch("8381013", "ALA", "K", "1H", quiet=True)
-    assert [os.path.basename(p) for p in paths] == [m["name"] for m in nt.data.select("8381013", "ALA", "K", "1H")]
+    assert [Path(p).name for p in paths] == [m["name"] for m in nt.data.select("8381013", "ALA", "K", "1H")]
     assert all(nt.data.member_for(p) for p in paths)
 
 
 def test_hosted_alanine_comes_from_github_without_a_checkout(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(nt.data, "REPO_DATA", str(tmp_path / "no-checkout"))
-    here = os.path.join(os.path.dirname(__file__), "..", "data", "alanine")
+    here = ROOT / "data" / "alanine"
     urls = []
 
     def raw(url, *a, **k):
         urls.append(url)
         name = url.rsplit("/", 1)[-1].replace("%20", " ").replace("%28", "(").replace("%29", ")")
-        return open(os.path.join(here, name), "rb").read()
+        return (here / name).read_bytes()
 
     monkeypatch.setattr(nt.data, "_get_bytes", raw)
     monkeypatch.setattr(nt.data, "_range_get", _no_network)
     nt.data.fetch("8381013", "ALA", "K", "1H", times="1day")
-    assert urls == ["https://raw.githubusercontent.com/Rakiura-Inc/morning-star-nmr/main/data/alanine/"
-                    "SZSSea-ALA-D2SO4lock-1H-04112023_1%20%281%29.zip"]
+    assert urls == [
+        "https://raw.githubusercontent.com/Rakiura-Inc/morning-star-nmr/main/data/alanine/"
+        "SZSSea-ALA-D2SO4lock-1H-04112023_1%20%281%29.zip"
+    ]
     assert "from Rakiura-Inc/morning-star-nmr" in capsys.readouterr().out
 
 
@@ -177,10 +195,11 @@ def test_hosted_copy_falls_back_to_zenodo(tmp_path, monkeypatch):
 
     def missing(url, *a, **k):
         calls.append("github")
-        raise OSError("404")
+        msg = "404"
+        raise OSError(msg)
 
     m = nt.data.select("8381013", "ALA", "K", "1H", times="1day")[0]
-    blob = open(os.path.join(os.path.dirname(__file__), "..", "data", "alanine", m["name"]), "rb").read()
+    blob = (ROOT / "data" / "alanine" / m["name"]).read_bytes()
     monkeypatch.setattr(nt.data, "_get_bytes", missing)
     monkeypatch.setattr(nt.data, "_range_get", lambda record, member: calls.append("zenodo") or blob)
     assert nt.data._crc_ok(nt.data.fetch_member("8381013", m), m)

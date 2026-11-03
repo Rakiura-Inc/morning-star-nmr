@@ -1,14 +1,18 @@
 """The hand-in path: offline mode, and live mode through the real `rakiura` helper (when installed)
 against a fake portal on localhost. Nothing here touches the real Rakiura."""
+
 import json
-import os
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
+from typing import ClassVar
 
 import matplotlib.pyplot as plt
 import pytest
 
 import nmrtrain as nt
+
+from .helpers import NOTEBOOKS, ROOT
 
 KEY = "rknb_" + "b" * 64
 
@@ -23,16 +27,22 @@ def test_offline_mode_logs_and_saves_files(tmp_path, capsys):
     assert nt.portal.connect("notebooks/01_capstone_ala_ala_vs_gly_gly.ipynb") == "offline"
     nt.record.predict("q", {"a": 1})
     assert nt.record.revealed("q")
-    rec = nt.record.handin("capstone-verdict", figures={"stack": _fig()}, verdict={"AA": {"call": "unsure"}},
-                           numbers={"AA_call": "unsure"}, question="q", traps=2)
-    out = os.path.join(nt.portal.state.handin_dir, "capstone-verdict")
-    assert os.path.exists(os.path.join(out, "stack.png"))
-    saved = json.load(open(os.path.join(out, "verdict.json")))
+    rec = nt.record.handin(
+        "capstone-verdict",
+        figures={"stack": _fig()},
+        verdict={"AA": {"call": "unsure"}},
+        numbers={"AA_call": "unsure"},
+        question="q",
+        traps=2,
+    )
+    out = Path(nt.portal.state.handin_dir, "capstone-verdict")
+    assert (out / "stack.png").exists()
+    saved = json.loads((out / "verdict.json").read_text())
     assert saved["predicted_before_reveal"] is True and saved["traps_flagged"] == 2
-    log = json.load(open(os.path.join(nt.portal.state.handin_dir, "rakiura_progress.json")))
+    log = json.loads(Path(nt.portal.state.handin_dir, "rakiura_progress.json").read_text())
     assert log[0]["part"] == "capstone-verdict" and log[0]["numbers"]["AA_call"] == "unsure"
     assert rec["ppm_scale"].startswith("instrument")
-    assert nt.portal.submit() is False   # offline mode never sends anything
+    assert nt.portal.submit() is False  # offline mode never sends anything
 
 
 def test_offline_ticks_print_plain_words_not_part_names(capsys):
@@ -41,8 +51,8 @@ def test_offline_ticks_print_plain_words_not_part_names(capsys):
     assert nt.portal.done("capstone-predict")
     out = capsys.readouterr().out
     assert out.strip() == "Prediction saved (offline mode: kept on this computer)."
-    log = json.load(open(os.path.join(nt.portal.state.handin_dir, "rakiura_progress.json")))
-    assert log[-1]["part"] == "capstone-predict"   # the portal still gets the part name
+    log = json.loads(Path(nt.portal.state.handin_dir, "rakiura_progress.json").read_text())
+    assert log[-1]["part"] == "capstone-predict"  # the portal still gets the part name
 
 
 def test_reveal_refuses_before_a_prediction(capsys):
@@ -67,28 +77,28 @@ def test_fill_keeps_the_notebook_running(capsys):
 
 def test_replication_row_matches_the_schema():
     import csv
+
     row = nt.record.replication_row("LL", "K", {"call": "Degrades"}, ["1day", "4Month"], matches="unsure")
-    here = os.path.dirname(__file__)
-    with open(os.path.join(here, "..", "replication", "replications.csv")) as fh:
+    with (ROOT / "replication" / "replications.csv").open() as fh:
         header = next(csv.reader(fh))
     assert list(row) == header == nt.record.REPLICATION_COLUMNS
     assert row["verdict"] == "degrades" and row["acid_wt_pct"] == 98 and row["contributor"] == "Rakiura member"
 
 
 def test_every_setup_cell_installs_the_helper_from_github():
-    import glob
-    here = os.path.dirname(__file__)
     line = '%pip install -q "rakiura @ git+https://github.com/Rakiura-Inc/rakiura-py@main"'
-    for path in sorted(glob.glob(os.path.join(here, "..", "notebooks", "[0-9][0-9]_*.ipynb"))):
-        setup = "".join(json.load(open(path))["cells"][1]["source"])
+    for path in NOTEBOOKS:
+        setup = "".join(json.loads(path.read_text())["cells"][1]["source"])
         assert line in setup and "morning-star-nmr@main" in setup, path
 
 
 # --- the Connect cell, with a stand-in helper -------------------------------------------------
 
+
 def _fake_helper(monkeypatch, start=True, name="Test Member", boom=False):
     import sys
     import types
+
     calls = []
     mod = types.ModuleType("rakiura")
     mod._session = types.SimpleNamespace(quiet=False)
@@ -96,7 +106,8 @@ def _fake_helper(monkeypatch, start=True, name="Test Member", boom=False):
     def _start(**kw):
         calls.append(("start", kw))
         if boom:
-            raise RuntimeError("network down")
+            msg = "network down"
+            raise RuntimeError(msg)
         return start
 
     mod.start = _start
@@ -113,8 +124,10 @@ def test_setup_cell_does_not_start_a_sign_in_without_a_key(monkeypatch, capsys):
     _, calls = _fake_helper(monkeypatch)
     assert nt.portal.connect("nb.ipynb") == "offline"
     assert calls == []
-    assert capsys.readouterr().out.strip() == ("Not connected to Rakiura. Your work stays on this computer. "
-                                               "Run the Connect cell below to tick steps on Rakiura.")
+    assert capsys.readouterr().out.strip() == (
+        "Not connected to Rakiura. Your work stays on this computer. "
+        "Run the Connect cell below to tick steps on Rakiura."
+    )
 
 
 def test_connect_cell_signs_in_and_names_the_member(monkeypatch, capsys):
@@ -157,15 +170,21 @@ def test_connect_cell_without_the_helper_says_what_to_do(monkeypatch, capsys):
     assert "run the setup cell above" in capsys.readouterr().out
 
 
-@pytest.mark.parametrize("path", sorted(__import__("glob").glob(
-    os.path.join(os.path.dirname(__file__), "..", "notebooks", "[0-9][0-9]_*.ipynb"))), ids=os.path.basename)
+@pytest.mark.parametrize("path", NOTEBOOKS, ids=lambda p: p.name)
 def test_every_notebook_has_the_connect_cell_after_setup(path):
-    cells = json.load(open(path))["cells"]
+    cells = json.loads(path.read_text())["cells"]
     box, code = "".join(cells[2]["source"]), "".join(cells[3]["source"])
-    assert "nt.portal.connect(NOTEBOOK)" in "".join(cells[1]["source"])   # the setup cell never waits
+    assert "nt.portal.connect(NOTEBOOK)" in "".join(cells[1]["source"])  # the setup cell never waits
     assert box.startswith("> **CONNECT TO RAKIURA (optional, recommended)**")
-    for part in ("**What it does:**", "**How:**", "**Skipping it is fine:**", "Allow", "RAKIURA_KEY",
-                 "once per session", "Nothing is sent until you connect"):
+    for part in (
+        "**What it does:**",
+        "**How:**",
+        "**Skipping it is fine:**",
+        "Allow",
+        "RAKIURA_KEY",
+        "once per session",
+        "Nothing is sent until you connect",
+    ):
         assert part in box, part
     assert "nt.portal.connect(NOTEBOOK, sign_in=True)" in code
 
@@ -173,6 +192,7 @@ def test_every_notebook_has_the_connect_cell_after_setup(path):
 def test_another_package_named_rakiura_is_not_used(monkeypatch, capsys):
     import sys
     import types
+
     monkeypatch.setitem(sys.modules, "rakiura", types.ModuleType("rakiura"))
     monkeypatch.setenv("RAKIURA_LIVE", "1")
     assert nt.portal._import_helper() is None
@@ -185,7 +205,7 @@ rakiura = pytest.importorskip("rakiura", reason="the Rakiura helper is not insta
 
 
 class Portal(BaseHTTPRequestHandler):
-    received: list = []
+    received: ClassVar[list] = []
 
     def log_message(self, *a):
         pass
@@ -201,8 +221,12 @@ class Portal(BaseHTTPRequestHandler):
     def do_GET(self):
         Portal.received.append((self.path, None, self.headers.get("Authorization")))
         if self.path.endswith("/me"):
-            return self._reply({"ok": True, "member": {"name": "Test Member"},
-                                "lab": {"name": "Morning Star Missions"}, "deliverables": []})
+            return self._reply({
+                "ok": True,
+                "member": {"name": "Test Member"},
+                "lab": {"name": "Morning Star Missions"},
+                "deliverables": [],
+            })
         self._reply({"ok": False})
 
     def do_POST(self):
@@ -210,16 +234,28 @@ class Portal(BaseHTTPRequestHandler):
         Portal.received.append((self.path, body, self.headers.get("Authorization")))
         step = {"id": "d7", "displayId": "ONB-102-D7", "name": "Capstone", "url": "https://labs.example.test/s"}
         if self.path.endswith("/runs"):
-            return self._reply({"ok": True, "run": {"id": "run-1"}, "lab": {"name": "Morning Star Missions"},
-                                "member": {"name": "Test Member"},
-                                "parts": [{"part": "capstone-verdict", "step": step}]})
+            return self._reply({
+                "ok": True,
+                "run": {"id": "run-1"},
+                "lab": {"name": "Morning Star Missions"},
+                "member": {"name": "Test Member"},
+                "parts": [{"part": "capstone-verdict", "step": step}],
+            })
         if self.path.endswith("/checkpoint"):
-            return self._reply({"ok": True, "deliverable": step, "changed": True,
-                                "item": {"key": body.get("checkpoint"), "label": "Verdict"},
-                                "progress": {"done": 1, "total": 4}})
+            return self._reply({
+                "ok": True,
+                "deliverable": step,
+                "changed": True,
+                "item": {"key": body.get("checkpoint"), "label": "Verdict"},
+                "progress": {"done": 1, "total": 4},
+            })
         if self.path.endswith("/artifacts"):
-            return self._reply({"ok": True, "deliverable": step, "created": True,
-                                "artifact": {"id": "a1", "title": body.get("title")}})
+            return self._reply({
+                "ok": True,
+                "deliverable": step,
+                "created": True,
+                "artifact": {"id": "a1", "title": body.get("title")},
+            })
         if self.path.endswith("/submit"):
             return self._reply({"ok": True, "deliverable": step, "attached": 3})
         self._reply({"ok": False})
@@ -247,8 +283,12 @@ def portal_server(tmp_path, monkeypatch):
 def test_live_mode_ticks_stages_and_submits_through_the_helper(portal_server, capsys):
     assert nt.portal.connect("notebooks/01_capstone_ala_ala_vs_gly_gly.ipynb") == "live"
     assert capsys.readouterr().out.strip() == "Connected to Rakiura as Test Member."
-    nt.record.handin("capstone-verdict", figures={"stack": _fig()}, verdict={"AA": {"call": "degrades"}},
-                     numbers={"AA_call": "degrades"})
+    nt.record.handin(
+        "capstone-verdict",
+        figures={"stack": _fig()},
+        verdict={"AA": {"call": "degrades"}},
+        numbers={"AA_call": "degrades"},
+    )
     paths = [p for p, _, _ in Portal.received]
     assert paths[0].endswith("/api/notebook/v1/runs")
     run = Portal.received[0][1]
@@ -260,7 +300,7 @@ def test_live_mode_ticks_stages_and_submits_through_the_helper(portal_server, ca
     verdict = next(a for a in arts if a.get("mimeType") == "text/plain")
     assert verdict["deliverableRef"] == "ONB-102-D7" and "degrades" in verdict["fileText"]
     assert all(auth == f"Bearer {KEY}" for _, _, auth in Portal.received)
-    assert not any(p.endswith("/submit") for p in paths)      # never submitted on its own
+    assert not any(p.endswith("/submit") for p in paths)  # never submitted on its own
     assert nt.portal.submit(note="ready") is True
     sub = next(b for p, b, _ in Portal.received if p.endswith("/submit"))
     assert sub["checkpoint"] == "capstone-verdict" and sub["note"] == "ready"

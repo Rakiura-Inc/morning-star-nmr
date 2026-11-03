@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+- Tooling brought up to date; nothing the notebooks print or save changes. Python 3.11 to 3.15 (3.10 is end of
+  life). uv for everything, with a committed `uv.lock`; the package builds with hatchling.
+- ruff lints and formats the package, scripts, tests and notebooks; prek runs the git hooks
+  (nbstripout keeps committed notebooks free of outputs). Tests run in parallel and in random order.
+- CI: tests on every supported Python, a wheel build and import, and a run of all five notebooks on
+  every pull request; every action pinned to a commit. Renovate keeps dependencies current.
+- Readability pass on the package with the same behaviour: the record list is in
+  `nmrtrain/records.json`, long functions are split, magic numbers are named. The answer keys
+  moved to `nmrtrain/answer_keys/`.
+
 ## 0.1.0 (2026-10-18, not published)
 - How much is left is measured against the acid peak in the same file, as a fraction of day 1
   (`nt.peaks.against_acid`, `left_of_first`, `left_band`), in notebooks 01 and 02, at the two levels

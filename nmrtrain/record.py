@@ -3,15 +3,27 @@
 Blind by order: a `reveal` cell asks `revealed(...)` first, which refuses until a prediction for
 that question exists. The hand-in records whether the prediction came first.
 """
+
 from __future__ import annotations
 
+import csv
 import datetime as _dt
 import json
 import os
+import shutil
 import subprocess
+from importlib.metadata import distribution
+from pathlib import Path
 
 from . import __version__, portal
+from ._safe import quietly
 from .checks import CALLS, CONFIDENCE, HARSHER, LEFT, key_call, plain_call, quoted, show_format
+from .data import RECORDS
+from .io import ACID_WT_PCT, NAMES
+
+FIGURE_DPI = 130
+COMMIT_CHARS = 12
+DIPEPTIDE_DOI = RECORDS["11223995"]["doi"]
 
 _predictions: dict[str, dict] = {}
 _reveals: dict[str, str] = {}
@@ -50,43 +62,52 @@ def revealed(question: str) -> bool:
 
 
 def predicted_before_reveal(question: str) -> bool:
-    return question in _predictions and (question not in _reveals
-                                         or _predictions[question]["at"] <= _reveals[question])
+    return question in _predictions and (question not in _reveals or _predictions[question]["at"] <= _reveals[question])
+
+
+def _installed_commit() -> str | None:
+    """The commit pip installed this package from (its direct_url.json), if it came from git."""
+    info = json.loads(distribution("nmrtrain").read_text("direct_url.json") or "{}")
+    return (info.get("vcs_info") or {}).get("commit_id")
+
+
+def _checkout_commit() -> str | None:
+    """HEAD of the git checkout this package is imported from, if there is one."""
+    git = shutil.which("git")
+    if git is None:
+        return None
+    out = subprocess.run(  # noqa: S603 (fixed arguments, no shell)
+        [git, "rev-parse", "HEAD"], cwd=Path(__file__).parent, capture_output=True, text=True, timeout=5, check=False
+    )
+    return out.stdout.strip() if out.returncode == 0 else None
 
 
 def pkg_commit() -> str:
     """The commit this package was installed from (pip's direct_url.json), or the checkout's HEAD."""
-    try:
-        from importlib.metadata import distribution
-        info = json.loads(distribution("nmrtrain").read_text("direct_url.json") or "{}")
-        sha = (info.get("vcs_info") or {}).get("commit_id")
-        if sha:
-            return sha[:12]
-    except Exception:
-        pass
-    try:
-        here = os.path.dirname(__file__)
-        out = subprocess.run(["git", "rev-parse", "HEAD"], cwd=here, capture_output=True, text=True, timeout=5)
-        if out.returncode == 0:
-            return out.stdout.strip()[:12]
-    except Exception:
-        pass
-    return f"v{__version__}"
+    sha = quietly(_installed_commit, None) or quietly(_checkout_commit, None)
+    return sha[:COMMIT_CHARS] if sha else f"v{__version__}"
 
 
-def handin(part: str, figures: dict | None = None, verdict: dict | None = None, numbers: dict | None = None,
-           question: str | None = None, traps: int = 0, processing: str = "pdata") -> dict:
+def handin(
+    part: str,
+    figures: dict | None = None,
+    verdict: dict | None = None,
+    numbers: dict | None = None,
+    question: str | None = None,
+    traps: int = 0,
+    processing: str = "pdata",
+) -> dict:
     """Save the figures (PNG) and the verdict (JSON) in handin/, then tick the part on Rakiura.
 
     figures: {"file_stem": fig}. numbers: at most 20 single values for the step.
     Nothing is submitted: run nt.portal.submit() yourself when you are ready.
     """
-    out = os.path.join(portal.state.handin_dir, part)
-    os.makedirs(out, exist_ok=True)
+    out = Path(portal.state.handin_dir, part)
+    out.mkdir(parents=True, exist_ok=True)
     saved = []
     for stem, fig in (figures or {}).items():
-        path = os.path.join(out, f"{stem}.png")
-        fig.savefig(path, dpi=130, bbox_inches="tight")
+        path = out / f"{stem}.png"
+        fig.savefig(path, dpi=FIGURE_DPI, bbox_inches="tight")
         saved.append(path)
     record = {
         "part": part,
@@ -98,21 +119,23 @@ def handin(part: str, figures: dict | None = None, verdict: dict | None = None, 
         "pkg": f"nmrtrain {__version__} @ {pkg_commit()}",
         "ppm_scale": "instrument (not re-referenced to the acid peak)",
     }
-    path = os.path.join(out, "verdict.json")
-    with open(path, "w") as fh:
-        json.dump(record, fh, indent=2, default=str)
+    path = out / "verdict.json"
+    path.write_text(json.dumps(record, indent=2, default=str))
     saved.append(path)
     nums = {"traps_flagged": traps, "pkg_commit": pkg_commit(), "processing": processing}
     if question:
         nums["predicted_before_reveal"] = bool(record["predicted_before_reveal"])
     nums.update(numbers or {})
-    portal.done(part, figures=list((figures or {}).values()), numbers=dict(list(nums.items())[:20]))
+    portal.done(part, figures=list((figures or {}).values()), numbers=dict(list(nums.items())[: portal.MAX_NUMBERS]))
     portal.stage_file(json.dumps(record, indent=1, default=str), f"{part} verdict.json")
     print("Saved for your hand-in:")
     for p in saved:
         print(f"   {os.path.relpath(p)}")
     if portal.state.mode == "offline":
-        print("Offline mode: attach these files on your step page. When you are connected to Rakiura, they are added for you.")
+        print(
+            "Offline mode: attach these files on your step page. "
+            "When you are connected to Rakiura, they are added for you."
+        )
     return record
 
 
@@ -124,36 +147,69 @@ def fill(value, default, name: str):
     return value
 
 
-REPLICATION_COLUMNS = ["row_id", "dipeptide", "dipeptide_name", "acid_wt_pct", "acid_code", "nucleus",
-                       "time_points", "processing", "tool", "verdict", "main_product", "matches_published",
-                       "traps_flagged", "dataset_doi", "reviewed_on", "contributor"]
+REPLICATION_COLUMNS = [
+    "row_id",
+    "dipeptide",
+    "dipeptide_name",
+    "acid_wt_pct",
+    "acid_code",
+    "nucleus",
+    "time_points",
+    "processing",
+    "tool",
+    "verdict",
+    "main_product",
+    "matches_published",
+    "traps_flagged",
+    "dataset_doi",
+    "reviewed_on",
+    "contributor",
+]
 
 
-def replication_row(sample: str, acid: str, entry: dict, time_points: list[str], matches: str = "unsure",
-                    traps: int = 0, processing: str = "pdata", nucleus: str = "1H") -> dict:
+def replication_row(
+    sample: str,
+    acid: str,
+    entry: dict,
+    time_points: list[str],
+    matches: str = "unsure",
+    traps: int = 0,
+    processing: str = "pdata",
+    nucleus: str = "1H",
+) -> dict:
     """One row for the shared results table (see replication/README.md). Staff fill
     row_id and reviewed_on after review; the contributor is credited by name only on opt-in."""
-    from .io import NAMES
-    return {"row_id": "", "dipeptide": sample, "dipeptide_name": NAMES.get(sample, sample),
-            "acid_wt_pct": {"K": 98, "H": 81}.get(acid, ""), "acid_code": acid, "nucleus": nucleus,
-            "time_points": ";".join(time_points), "processing": processing,
-            "tool": f"nmrtrain {pkg_commit()}", "verdict": key_call(entry.get("call", "")) or "blank",
-            "main_product": str(entry.get("product_guess", "")).strip(), "matches_published": matches,
-            "traps_flagged": traps, "dataset_doi": "10.5281/zenodo.11223995", "reviewed_on": "",
-            "contributor": "Rakiura member"}
+    return {
+        "row_id": "",
+        "dipeptide": sample,
+        "dipeptide_name": NAMES.get(sample, sample),
+        "acid_wt_pct": ACID_WT_PCT.get(acid, ""),
+        "acid_code": acid,
+        "nucleus": nucleus,
+        "time_points": ";".join(time_points),
+        "processing": processing,
+        "tool": f"nmrtrain {pkg_commit()}",
+        "verdict": key_call(entry.get("call", "")) or "blank",
+        "main_product": str(entry.get("product_guess", "")).strip(),
+        "matches_published": matches,
+        "traps_flagged": traps,
+        "dataset_doi": DIPEPTIDE_DOI,
+        "reviewed_on": "",
+        "contributor": "Rakiura member",
+    }
 
 
 def save_rows(rows: list[dict], part: str, name: str = "replication_rows.csv") -> str:
-    import csv
-    out = os.path.join(portal.state.handin_dir, part)
-    os.makedirs(out, exist_ok=True)
-    path = os.path.join(out, name)
-    with open(path, "w", newline="") as fh:
+    """Save shared-results-table rows as a CSV in the part's hand-in folder."""
+    out = Path(portal.state.handin_dir, part)
+    out.mkdir(parents=True, exist_ok=True)
+    path = out / name
+    with path.open("w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=REPLICATION_COLUMNS)
         w.writeheader()
         w.writerows(rows)
     print(f"   {os.path.relpath(path)}")
-    return path
+    return str(path)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -169,24 +225,104 @@ def _ppm_list(values) -> str:
     return v[0] if len(v) == 1 else ", ".join(v[:-1]) + " and " + v[-1]
 
 
+def _show_markdown(markdown: str) -> bool:
+    """Display markdown when running in a notebook (not a terminal IPython). True if shown."""
+    from IPython import get_ipython  # IPython is only there in a notebook
+
+    shell = get_ipython()
+    if shell is None or type(shell).__name__ == "TerminalInteractiveShell":
+        return False
+    from IPython.display import Markdown, display
+
+    display(Markdown(markdown))
+    return True
+
+
 def _say(markdown: str, plain: str) -> None:
     """One line for the member: bold in a notebook, plain text anywhere else."""
-    try:
-        from IPython import get_ipython
-        shell = get_ipython()
-        if shell is not None and type(shell).__name__ != "TerminalInteractiveShell":
-            from IPython.display import Markdown, display
-            display(Markdown(markdown))
-            return
-    except Exception:
-        pass
-    print(plain)
+    if not quietly(lambda: _show_markdown(markdown), False):
+        print(plain)
 
 
 def _confirm(name: str, value, saved: bool, rest: str) -> None:
     head = "Saved" if saved else "Not saved yet"
     shown = f"{name} = {'...' if value is ... else repr(value)}"
     _say(f"**{head}** `{shown}`{': ' + rest if rest else ''}", f"{head} {shown}{': ' + rest if rest else ''}")
+
+
+# What each verdict field accepts, and how a member reads its name.
+_ALLOWED = {"call": CALLS, "confidence": CONFIDENCE, "left": LEFT, "harsher": HARSHER}
+_FIELD_WORDS = {
+    "call": "your decision",
+    "confidence": "the confidence",
+    "left": "how much is left",
+    "harsher": "which acid was harsher",
+    "product_guess": "the product guess",
+    "note": "the note",
+}
+_SAME_PEAK_PPM = 0.05  # a picked peak this close to one the member wrote is the same peak
+
+
+def _write_down_list(name: str, value, who: str, field: str, suggestion: list | None) -> None:
+    """Confirm a ppm list (lost, new or kept peaks), comparing it with what the peak picker found."""
+    word, group = _LIST_WORDS[field]
+    if not isinstance(value, (list, tuple)):
+        _confirm(name, value, False, f"write the {word}s as numbers in square brackets, like [2.08, 4.94].")
+        return
+    bad = [p for p in value if not isinstance(p, (int, float))]
+    if bad:
+        _confirm(
+            name, value, False, f"write each {word} as a number without quotes, like [2.08, 4.94] (found {bad[0]!r})."
+        )
+        return
+    sugg = [round(float(p), 2) for p in (suggestion or [])]
+    if not value:
+        rest = f"no {word}s for {who}. If there were none, that is your answer and you can move on."
+        if sugg:
+            rest += f" The peak picker listed these as {group}: {_ppm_list(sugg)}. Copy the ones you agree with."
+        _confirm(name, value, True, rest)
+        return
+    n = len(value)
+    rest = f"{n} {word}{'s' if n != 1 else ''} for {who}, at {_ppm_list(value)} ppm."
+    extra = [p for p in sugg if not any(abs(p - q) <= _SAME_PEAK_PPM for q in value)]
+    if extra:
+        rest += f" The peak picker also listed {_ppm_list(extra)} as {group}; check whether you agree."
+    _confirm(name, value, True, rest)
+
+
+def _write_down_blank(name: str, value, who: str, field: str) -> None:
+    """Confirm an empty text field: fine for a note, a reminder for anything else."""
+    if field == "note":
+        _confirm(name, value, True, f"no note for {who}. That is fine.")
+    elif field == "product_guess":
+        _confirm(
+            name,
+            value,
+            False,
+            f'write what you think {who} turned into, "none" if nothing new '
+            'formed, or leave "" if you have no idea yet.',
+        )
+    else:
+        allowed = _ALLOWED.get(field)
+        fair = ' ("unsure" is a fair answer)' if "unsure" in allowed else ""
+        words = _FIELD_WORDS.get(field, field)
+        _confirm(name, value, False, f"write {words} for {who}: one of {quoted(allowed)}{fair}.")
+
+
+def _write_down_text(name: str, value, who: str, field: str) -> None:
+    """Confirm a text field (decision, confidence, how much is left, product guess, note...)."""
+    text = str(value or "").strip()
+    if not text:
+        _write_down_blank(name, value, who, field)
+        return
+    if field == "call":
+        text = plain_call(text)
+    allowed = _ALLOWED.get(field)
+    if allowed and text.lower() not in allowed:
+        _confirm(name, value, False, f"write one of {quoted(allowed)}.")
+        return
+    words = _FIELD_WORDS.get(field, field)
+    _confirm(name, value, True, f"{words} for {who}." if field != "note" else f"your note for {who}.")
 
 
 def write_down(name: str, value, who: str, field: str, suggestion: list | None = None):
@@ -198,56 +334,22 @@ def write_down(name: str, value, who: str, field: str, suggestion: list | None =
     into the answer. Returns the value unchanged.
     """
     if field in _LIST_WORDS:
-        word, group = _LIST_WORDS[field]
-        if not isinstance(value, (list, tuple)):
-            _confirm(name, value, False, f"write the {word}s as numbers in square brackets, like [2.08, 4.94].")
-            return value
-        bad = [p for p in value if not isinstance(p, (int, float))]
-        if bad:
-            _confirm(name, value, False, f"write each {word} as a number without quotes, like [2.08, 4.94] "
-                                         f"(found {bad[0]!r}).")
-            return value
-        sugg = [round(float(p), 2) for p in (suggestion or [])]
-        if not value:
-            rest = f"no {word}s for {who}. If there were none, that is your answer and you can move on."
-            if sugg:
-                rest += f" The peak picker listed these as {group}: {_ppm_list(sugg)}. Copy the ones you agree with."
-            _confirm(name, value, True, rest)
-            return value
-        n = len(value)
-        rest = f"{n} {word}{'s' if n != 1 else ''} for {who}, at {_ppm_list(value)} ppm."
-        extra = [p for p in sugg if not any(abs(p - q) <= 0.05 for q in value)]
-        if extra:
-            rest += f" The peak picker also listed {_ppm_list(extra)} as {group}; check whether you agree."
-        _confirm(name, value, True, rest)
-        return value
-    text = str(value or "").strip()
-    allowed = {"call": CALLS, "confidence": CONFIDENCE, "left": LEFT, "harsher": HARSHER}.get(field)
-    words = {"call": "your decision", "confidence": "the confidence", "left": "how much is left",
-             "harsher": "which acid was harsher",
-             "product_guess": "the product guess", "note": "the note"}.get(field, field)
-    if not text:
-        if field == "note":
-            _confirm(name, value, True, f"no note for {who}. That is fine.")
-        elif field == "product_guess":
-            _confirm(name, value, False, f'write what you think {who} turned into, "none" if nothing new '
-                                         'formed, or leave "" if you have no idea yet.')
-        else:
-            fair = ' ("unsure" is a fair answer)' if "unsure" in allowed else ""
-            _confirm(name, value, False, f"write {words} for {who}: one of {quoted(allowed)}{fair}.")
-        return value
-    if field == "call":
-        text = plain_call(text)
-    if allowed and text.lower() not in allowed:
-        _confirm(name, value, False, f"write one of {quoted(allowed)}.")
-        return value
-    _confirm(name, value, True, f"{words} for {who}." if field != "note" else f"your note for {who}.")
+        _write_down_list(name, value, who, field, suggestion)
+    else:
+        _write_down_text(name, value, who, field)
     return value
 
 
-_TABLE_COLUMNS = [("call", "decision"), ("lost_ppm", "lost peaks (ppm)"), ("new_ppm", "new peaks (ppm)"),
-                  ("kept_ppm", "kept peaks (ppm)"), ("left", "how much is left"), ("product_guess", "product guess"),
-                  ("confidence", "confidence"), ("note", "note")]
+_TABLE_COLUMNS = [
+    ("call", "decision"),
+    ("lost_ppm", "lost peaks (ppm)"),
+    ("new_ppm", "new peaks (ppm)"),
+    ("kept_ppm", "kept peaks (ppm)"),
+    ("left", "how much is left"),
+    ("product_guess", "product guess"),
+    ("confidence", "confidence"),
+    ("note", "note"),
+]
 
 
 def _cell(value) -> str:
@@ -259,16 +361,18 @@ def _cell(value) -> str:
 
 def verdict_table(rows: dict, examples: dict | None = None) -> str:
     """A Markdown table, one row per molecule, columns as on the hand-in."""
-    present = [(k, t) for k, t in _TABLE_COLUMNS
-               if any(k in e for e in list(rows.values()) + list((examples or {}).values()))]
+    present = [
+        (k, t) for k, t in _TABLE_COLUMNS if any(k in e for e in list(rows.values()) + list((examples or {}).values()))
+    ]
     lines = ["| | " + " | ".join(t for _, t in present) + " |", "|---" * (len(present) + 1) + "|"]
     for label, entry in list((examples or {}).items()) + list(rows.items()):
         lines.append(f"| **{label}** | " + " | ".join(_cell(entry.get(k, "")) for k, _ in present) + " |")
     return "\n".join(lines)
 
 
-def build_verdict(rows: dict, names: dict | None = None, examples: dict | None = None, check: list | None = None,
-                  **extra) -> dict:
+def build_verdict(
+    rows: dict, names: dict | None = None, examples: dict | None = None, check: list | None = None, **extra
+) -> dict:
     """Assemble the verdict from the fields recorded above, show it as a table, and return it in the
     hand-in format: {case: {...}, **extra}. rows: {case: entry}. names: {case: row label}.
     examples: {row label: entry}, shown in the table for comparison and left out of the verdict.

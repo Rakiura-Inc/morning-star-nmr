@@ -18,8 +18,8 @@ CSV as a searchable table.
 Columns: see [`schema.json`](schema.json).
 
 ```sh
-python replication/update_table.py --reference
-python replication/update_table.py --rows path/to/replication_rows.csv --reviewed-on 2026-11-02
+uv run replication/update_table.py --reference
+uv run replication/update_table.py --rows path/to/replication_rows.csv --reviewed-on 2026-11-02
 ```
 
 ## Grid

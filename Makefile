@@ -1,37 +1,32 @@
-# Local testing.
-#   make local      create .venv, install this package (editable) and the Rakiura helper, then open
+# Local work, all through uv (https://docs.astral.sh/uv/).
+#   make local      install everything (the package editable, the Rakiura helper, Jupyter Lab) and open
 #                   Jupyter Lab on the notebooks
-#   make test       run the tests
+#   make test       run the tests (in parallel, in random order)
+#   make lint       ruff on the code and the notebooks
+#   make hooks      every git hook, as CI runs them (ruff, notebook output stripping, workflow checks...)
 #   make run        execute every notebook headless (blank answers) into notebooks/executed/
 
-PYTHON ?= python3
-VENV ?= .venv
-# The Rakiura notebook helper (optional). Set RAKIURA_HELPER to a local checkout to use that instead.
-RAKIURA_HELPER ?= rakiura @ git+https://github.com/Rakiura-Inc/rakiura-py@main
-BIN := $(VENV)/bin
+.PHONY: local test lint hooks run manifests clean
 
-.PHONY: local venv install test run manifests clean
+local:
+	uv sync --group notebooks --extra explore
+	uv run jupyter lab notebooks
 
-local: install
-	$(BIN)/jupyter lab notebooks
+test:
+	uv run pytest
 
-venv:
-	test -x $(BIN)/python || $(PYTHON) -m venv $(VENV)
-	$(BIN)/python -m pip install -q --upgrade pip
+lint:
+	uv run ruff check .
+	uv run ruff format --check .
 
-install: venv
-	$(BIN)/pip install -q -e ".[dev,notebooks,explore]"
-	@$(BIN)/pip install -q "$(RAKIURA_HELPER)" && echo "Installed the Rakiura helper." \
-		|| echo "Could not install the Rakiura helper, so the notebooks run in offline mode."
+hooks:
+	uvx prek run --all-files
 
-test: install
-	$(BIN)/python -m pytest -q
+run:
+	RAKIURA_LIVE=0 uv run scripts/run_notebooks.py
 
-run: install
-	RAKIURA_LIVE=0 $(BIN)/python scripts/run_notebooks.py
-
-manifests: install
-	$(BIN)/python scripts/build_manifest.py
+manifests:
+	uv run scripts/build_manifest.py
 
 clean:
 	rm -rf notebooks/handin notebooks/nmr_data handin nmr_data .pytest_cache

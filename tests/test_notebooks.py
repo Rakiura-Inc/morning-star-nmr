@@ -1,28 +1,29 @@
 """Notebook policy: clean commits, cell tags, the hand-in, part names, and member-facing copy."""
-import glob
+
 import json
-import os
 import re
 
 import pytest
 
-HERE = os.path.dirname(__file__)
-ROOT = os.path.join(HERE, "..")
-NOTEBOOKS = sorted(glob.glob(os.path.join(ROOT, "notebooks", "[0-9][0-9]_*.ipynb")))
+from .helpers import NOTEBOOKS, ROOT
+
 TAGS = {"context", "setup", "worked", "predict", "do", "reveal", "check", "handin", "extra"}
-DASHES = re.compile("[–—]")   # en and em dashes
+DASHES = re.compile("[\u2013\u2014]")  # en and em dashes
+
+
+def _name(path):
+    return path.name
 
 
 def _nb(path):
-    with open(path) as fh:
-        return json.load(fh)
+    return json.loads(path.read_text())
 
 
 def test_there_are_five_notebooks():
-    assert [os.path.basename(p)[:2] for p in NOTEBOOKS] == ["01", "02", "03", "04", "05"]
+    assert [p.name[:2] for p in NOTEBOOKS] == ["01", "02", "03", "04", "05"]
 
 
-@pytest.mark.parametrize("path", NOTEBOOKS, ids=os.path.basename)
+@pytest.mark.parametrize("path", NOTEBOOKS, ids=_name)
 def test_committed_clean_and_tagged(path):
     nb = _nb(path)
     for c in nb["cells"]:
@@ -35,46 +36,47 @@ def test_committed_clean_and_tagged(path):
         assert needed in kinds, needed
 
 
-@pytest.mark.parametrize("path", NOTEBOOKS, ids=os.path.basename)
+@pytest.mark.parametrize("path", NOTEBOOKS, ids=_name)
 def test_parts_are_listed_for_the_portal(path):
-    with open(os.path.join(ROOT, "notebooks", "rakiura_steps.json")) as fh:
-        conf = json.load(fh)["notebooks"][os.path.basename(path)]
+    conf = json.loads((ROOT / "notebooks" / "rakiura_steps.json").read_text())["notebooks"][path.name]
     src = "\n".join("".join(c["source"]) for c in _nb(path)["cells"] if c["cell_type"] == "code")
     used = set(re.findall(r'nt\.portal\.done\("([^"]+)"', src)) | set(re.findall(r'handin\(\s*"([^"]+)"', src))
     assert used and used <= set(conf["parts"]), used - set(conf["parts"])
     assert conf["project"] in ("ONB-102", "RES-102")
 
 
-@pytest.mark.parametrize("path", NOTEBOOKS, ids=os.path.basename)
+@pytest.mark.parametrize("path", NOTEBOOKS, ids=_name)
 def test_notebook_names_itself_by_its_repo_path(path):
     src = "".join(_nb(path)["cells"][1]["source"])
-    assert f'NOTEBOOK = "notebooks/{os.path.basename(path)}"' in src
+    assert f'NOTEBOOK = "notebooks/{path.name}"' in src
 
 
 def test_no_dashes_in_member_facing_text():
     texts = []
     for path in NOTEBOOKS:
         texts += ["".join(c["source"]) for c in _nb(path)["cells"]]
-    for path in glob.glob(os.path.join(ROOT, "nmrtrain", "*.py")) + glob.glob(os.path.join(ROOT, "answer_keys", "*.json")):
-        with open(path) as fh:
-            texts.append(fh.read())
+    package = ROOT / "nmrtrain"
+    texts += [
+        p.read_text() for p in [*package.glob("*.py"), *package.glob("*.json"), *package.glob("answer_keys/*.json")]
+    ]
     bad = [t[:60] for t in texts if DASHES.search(t)]
     assert not bad, bad
 
 
 def _visible(text):
-    return re.sub(r"<details>.*?</details>", "", text, flags=re.S)
+    return re.sub(r"<details>.*?</details>", "", text, flags=re.DOTALL)
 
 
 def test_markdown_stays_short():
     # Fold-out hints are opt-in, so only the always-visible text counts.
     for path in NOTEBOOKS:
-        words = sum(len(_visible("".join(c["source"])).split()) for c in _nb(path)["cells"]
-                    if c["cell_type"] == "markdown")
-        assert words <= 2400, (os.path.basename(path), words)
+        words = sum(
+            len(_visible("".join(c["source"])).split()) for c in _nb(path)["cells"] if c["cell_type"] == "markdown"
+        )
+        assert words <= 2400, (path.name, words)
 
 
-@pytest.mark.parametrize("path", NOTEBOOKS, ids=os.path.basename)
+@pytest.mark.parametrize("path", NOTEBOOKS, ids=_name)
 def test_every_fill_in_cell_is_scaffolded(path):
     """Each cell a member writes in sits under a RECORD YOUR ANSWER box that says what is saved,
     where to look and how to fill it in, with two fold-out hints; a What you need cell with a link
@@ -86,10 +88,15 @@ def test_every_fill_in_cell_is_scaffolded(path):
             continue
         above = "".join(cells[i - 1]["source"])
         assert cells[i - 1]["cell_type"] == "markdown" and "**RECORD YOUR ANSWER:" in above, c["source"][:2]
-        for part in ("**What gets saved:**", "**Where to look:**", "**How to fill this in:**",
-                     "Stuck? Open hint 1", "Stuck? Open hint 2"):
+        for part in (
+            "**What gets saved:**",
+            "**Where to look:**",
+            "**How to fill this in:**",
+            "Stuck? Open hint 1",
+            "Stuck? Open hint 2",
+        ):
             assert part in above, (part, c["source"][:2])
-        before = "\n".join("".join(x["source"]) for x in cells[max(0, i - 4):i] if x["cell_type"] == "markdown")
+        before = "\n".join("".join(x["source"]) for x in cells[max(0, i - 4) : i] if x["cell_type"] == "markdown")
         assert "### What you need" in before and "Longer version:" in before, c["source"][:2]
         assert "#" in "".join(c["source"]), "each line a member fills carries a comment"
     handins = [i for i, c in enumerate(cells) if "handin" in c["metadata"]["tags"]]
@@ -97,10 +104,10 @@ def test_every_fill_in_cell_is_scaffolded(path):
 
 
 def test_training_not_exam_language():
-    exam = re.compile(r"\b(score|scored|grade|graded|exam|quiz|correct answer|wrong answer|pass mark)\b", re.I)
+    exam = re.compile(r"\b(score|scored|grade|graded|exam|quiz|correct answer|wrong answer|pass mark)\b", re.IGNORECASE)
     for path in NOTEBOOKS:
         for c in _nb(path)["cells"]:
             text = "".join(c["source"])
-            assert not exam.search(text), (os.path.basename(path), exam.search(text).group(0))
+            assert not exam.search(text), (path.name, exam.search(text).group(0))
             for jargon in ("residue", "alpha-H", "[look again]", "[agrees]"):
-                assert jargon not in text, (os.path.basename(path), jargon)
+                assert jargon not in text, (path.name, jargon)

@@ -4,16 +4,17 @@ The order (digital filter, line broadening, zero-fill, FFT, phase, reverse, base
 the dry run proved against the instrument's own processing. Bruker spectra come out of the FFT
 mirrored; `reverse` fixes that, and it is the only place in the package that touches direction.
 """
-from __future__ import annotations
 
-import warnings
+from __future__ import annotations
 
 import numpy as np
 
-warnings.filterwarnings("ignore", module="nmrglue")
-import nmrglue as ng  # noqa: E402
+from ._nmrglue import ng
+from .io import Spectrum, load_fid
 
-from .io import Spectrum, load_fid  # noqa: E402
+# The instrument's own settings for these spectra.
+INSTRUMENT_LB_HZ = 0.5
+INSTRUMENT_SIZE = 65536
 
 
 def remove_digital_filter(dic: dict, fid: np.ndarray) -> np.ndarray:
@@ -21,22 +22,25 @@ def remove_digital_filter(dic: dict, fid: np.ndarray) -> np.ndarray:
     return ng.bruker.remove_digital_filter(dic, fid)
 
 
-def line_broaden(dic: dict, fid: np.ndarray, lb_hz: float = 0.5) -> np.ndarray:
+def line_broaden(dic: dict, fid: np.ndarray, lb_hz: float = INSTRUMENT_LB_HZ) -> np.ndarray:
     """Exponential smoothing; 0.5 Hz is what the instrument used for these spectra."""
     return ng.proc_base.em(fid, lb=lb_hz / float(dic["acqus"]["SW_h"]))
 
 
-def zero_fill(fid: np.ndarray, size: int = 65536) -> np.ndarray:
+def zero_fill(fid: np.ndarray, size: int = INSTRUMENT_SIZE) -> np.ndarray:
     """Pad with zeros to `size` points: a finer ppm grid, no new information. A size smaller than
     the recording cannot pad anything, so the recording is kept as it is (with one line saying so)."""
     if size < fid.size:
-        print(f"ZERO_FILL = {size} is smaller than the {fid.size} points in this recording, so there is "
-              f"nothing to pad. Using {fid.size} points. Pick 32768 or more.")
+        print(
+            f"ZERO_FILL = {size} is smaller than the {fid.size} points in this recording, so there is "
+            f"nothing to pad. Using {fid.size} points. Pick 32768 or more."
+        )
         return fid
     return ng.proc_base.zf_size(fid, size)
 
 
 def fft(fid: np.ndarray) -> np.ndarray:
+    """Fourier transform: signal against time becomes signal against frequency."""
     return ng.proc_base.fft(fid)
 
 
@@ -57,18 +61,26 @@ def baseline(y: np.ndarray, order: int = 3, exclude_frac: float = 0.8) -> np.nda
     """Subtract a smooth polynomial fitted to the quietest points (a simple baseline correction)."""
     y = np.asarray(y, dtype=float)
     x = np.linspace(-1, 1, y.size)
-    keep = np.abs(y - np.median(y)) <= np.quantile(np.abs(y - np.median(y)), exclude_frac)
+    spread = np.abs(y - np.median(y))
+    keep = spread <= np.quantile(spread, exclude_frac)
     coef = np.polynomial.polynomial.polyfit(x[keep], y[keep], order)
     return y - np.polynomial.polynomial.polyval(x, coef)
 
 
 def ppm_axis(dic: dict, spec: np.ndarray) -> np.ndarray:
+    """The ppm value of every point, from the experiment's parameters."""
     uc = ng.fileiobase.uc_from_udic(ng.bruker.guess_udic(dic, spec))
     return uc.ppm_scale()
 
 
-def process_fid(zip_path: str, *, reverse_axis: bool = True, size: int = 65536, lb_hz: float = 0.5,
-                do_baseline: bool = True) -> Spectrum:
+def process_fid(
+    zip_path: str,
+    *,
+    reverse_axis: bool = True,
+    size: int = INSTRUMENT_SIZE,
+    lb_hz: float = INSTRUMENT_LB_HZ,
+    do_baseline: bool = True,
+) -> Spectrum:
     """All the steps, in order. Returns a Spectrum on the same footing as `load_processed`."""
     dic, fid, template = load_fid(zip_path)
     fid = remove_digital_filter(dic, fid)

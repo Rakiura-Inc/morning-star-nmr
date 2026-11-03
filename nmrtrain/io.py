@@ -7,34 +7,68 @@ every notebook except the raw-processing one. `load_fid` reads the raw signal (t
 The ppm scale is the instrument's own. Nothing here re-references a spectrum to the acid peak:
 that peak drifts over the months (see the README).
 """
+
 from __future__ import annotations
 
 import datetime as _dt
-import glob
-import os
 import re
-import warnings
 import zipfile
 from dataclasses import dataclass, field, replace
+from pathlib import Path
 
 import numpy as np
 
-warnings.filterwarnings("ignore", module="nmrglue")
-import nmrglue as ng  # noqa: E402
-
-from . import data as _data  # noqa: E402
+from . import data as _data
+from ._nmrglue import ng
 
 ACID_PCT = {"K": "98%", "H": "81%"}
-NAMES = {  # one- and three-letter codes used in the datasets
-    "AA": "Ala-Ala", "CC": "Cys-Cys", "DD": "Asp-Asp", "EE": "Glu-Glu", "FF": "Phe-Phe", "GG": "Gly-Gly",
-    "HH": "His-His", "II": "Ile-Ile", "KK": "Lys-Lys", "LL": "Leu-Leu", "MM": "Met-Met", "NN": "Asn-Asn",
-    "PP": "Pro-Pro", "QQ": "Gln-Gln", "RR": "Arg-Arg", "SS": "Ser-Ser", "TT": "Thr-Thr", "VV": "Val-Val",
-    "WW": "Trp-Trp", "YY": "Tyr-Tyr",
-    "ALA": "alanine", "ARG": "arginine", "ASN": "asparagine", "ASP": "aspartic acid", "CYS": "cysteine",
-    "GLN": "glutamine", "GLU": "glutamic acid", "GLY": "glycine", "HIS": "histidine", "ILE": "isoleucine",
-    "LEU": "leucine", "LYS": "lysine", "MET": "methionine", "PHE": "phenylalanine", "PRO": "proline",
-    "SER": "serine", "THR": "threonine", "TRP": "tryptophan", "TYR": "tyrosine", "VAL": "valine",
-    "LAlaninamide": "L-alaninamide", "LGlycinamide": "L-glycinamide", "AA+A": "Ala-Ala + alanine",
+ACID_WT_PCT = {"K": 98, "H": 81}
+# The sample codes used in the datasets' file names: two-letter homodipeptides, three-letter amino
+# acids, and the mechanism study's reference compounds.
+NAMES = {
+    "AA": "Ala-Ala",
+    "CC": "Cys-Cys",
+    "DD": "Asp-Asp",
+    "EE": "Glu-Glu",
+    "FF": "Phe-Phe",
+    "GG": "Gly-Gly",
+    "HH": "His-His",
+    "II": "Ile-Ile",
+    "KK": "Lys-Lys",
+    "LL": "Leu-Leu",
+    "MM": "Met-Met",
+    "NN": "Asn-Asn",
+    "PP": "Pro-Pro",
+    "QQ": "Gln-Gln",
+    "RR": "Arg-Arg",
+    "SS": "Ser-Ser",
+    "TT": "Thr-Thr",
+    "VV": "Val-Val",
+    "WW": "Trp-Trp",
+    "YY": "Tyr-Tyr",
+    "ALA": "alanine",
+    "ARG": "arginine",
+    "ASN": "asparagine",
+    "ASP": "aspartic acid",
+    "CYS": "cysteine",
+    "GLN": "glutamine",
+    "GLU": "glutamic acid",
+    "GLY": "glycine",
+    "HIS": "histidine",
+    "ILE": "isoleucine",
+    "LEU": "leucine",
+    "LYS": "lysine",
+    "MET": "methionine",
+    "PHE": "phenylalanine",
+    "PRO": "proline",
+    "SER": "serine",
+    "THR": "threonine",
+    "TRP": "tryptophan",
+    "TYR": "tyrosine",
+    "VAL": "valine",
+    "LAlaninamide": "L-alaninamide",
+    "LGlycinamide": "L-glycinamide",
+    "AA+A": "Ala-Ala + alanine",
 }
 
 
@@ -51,16 +85,16 @@ def time_label(t: str) -> str:
 
 @dataclass
 class Spectrum:
-    ppm: np.ndarray            # chemical shift axis, high to low
-    y: np.ndarray              # intensity (real part)
+    ppm: np.ndarray  # chemical shift axis, high to low
+    y: np.ndarray  # intensity (real part)
     sample: str = "?"
     acid: str = "?"
     time: str = "?"
     nucleus: str = "1H"
     acquired: _dt.datetime | None = None
-    sf: float = 400.0          # spectrometer frequency in MHz (turns ppm into Hz)
-    name: str = ""             # inner zip name
-    folder: str = ""           # experiment folder name inside the zip
+    sf: float = 400.0  # spectrometer frequency in MHz (turns ppm into Hz)
+    name: str = ""  # inner zip name
+    folder: str = ""  # experiment folder name inside the zip
     expdir: str = ""
     processing: str = "pdata"  # "pdata" (instrument) or "raw" (processed here)
     meta: dict = field(default_factory=dict, repr=False)
@@ -82,42 +116,55 @@ class Spectrum:
         m = (self.ppm >= lo) & (self.ppm <= hi)
         return self.ppm[m], self.y[m]
 
-    def with_data(self, ppm, y, **changes) -> "Spectrum":
+    def with_data(self, ppm, y, **changes) -> Spectrum:
         return replace(self, ppm=np.asarray(ppm), y=np.asarray(y), **changes)
 
 
-def _safe_extract(zip_path: str, out: str) -> None:
+def _safe_extract(zip_path: str, out: Path) -> None:
+    """Unpack a zip into out, refusing any member that would land outside it."""
+    root = out.resolve()
     with zipfile.ZipFile(zip_path) as z:
         for info in z.infolist():
-            target = os.path.realpath(os.path.join(out, info.filename))
-            if not target.startswith(os.path.realpath(out) + os.sep) and target != os.path.realpath(out):
-                raise OSError(f"refusing to unpack {info.filename!r} outside the data folder")
+            if not (root / info.filename).resolve().is_relative_to(root):
+                msg = f"refusing to unpack {info.filename!r} outside the data folder"
+                raise OSError(msg)
         z.extractall(out)
+
+
+def _acqus_files(folder: Path) -> list[str]:
+    return sorted(str(p) for p in folder.rglob("acqus"))
 
 
 def experiment_dir(zip_path: str) -> str:
     """Unpack one inner zip (once) and return the folder that holds `acqus`."""
-    out = os.path.join(_data.data_dir(), "_unpacked", os.path.basename(zip_path)[:-4])
-    found = sorted(glob.glob(os.path.join(out, "**", "acqus"), recursive=True))
+    out = Path(_data.data_dir(), "_unpacked", Path(zip_path).name[: -len(".zip")])
+    found = _acqus_files(out)
     if not found:
-        os.makedirs(out, exist_ok=True)
+        out.mkdir(parents=True, exist_ok=True)
         _safe_extract(zip_path, out)
-        found = sorted(glob.glob(os.path.join(out, "**", "acqus"), recursive=True))
+        found = _acqus_files(out)
     if not found:
-        raise FileNotFoundError(f"{os.path.basename(zip_path)} holds no Bruker experiment (no acqus file)")
-    return os.path.dirname(found[0])
+        msg = f"{Path(zip_path).name} holds no Bruker experiment (no acqus file)"
+        raise FileNotFoundError(msg)
+    return str(Path(found[0]).parent)
 
 
 def _meta_from(zip_path: str, nucleus: str | None) -> dict:
+    """The labels for one experiment, read from the manifest entry that matches its file name."""
     m = _data.member_for(zip_path) or {}
-    return {"sample": m.get("sample", "?"), "acid": m.get("acid", "?"), "time": m.get("time_group", "?"),
-            "nucleus": m.get("nucleus", nucleus or "1H"), "name": os.path.basename(zip_path),
-            "meta": {"record": m.get("record"), "time_in_name": m.get("time")}}
+    return {
+        "sample": m.get("sample", "?"),
+        "acid": m.get("acid", "?"),
+        "time": m.get("time_group", "?"),
+        "nucleus": m.get("nucleus", nucleus or "1H"),
+        "name": Path(zip_path).name,
+        "meta": {"record": m.get("record"), "time_in_name": m.get("time")},
+    }
 
 
 def _acquired(dic: dict) -> _dt.datetime | None:
     try:
-        return _dt.datetime.fromtimestamp(int(dic["acqus"]["DATE"]), tz=_dt.timezone.utc)
+        return _dt.datetime.fromtimestamp(int(dic["acqus"]["DATE"]), tz=_dt.UTC)
     except (KeyError, TypeError, ValueError):
         return None
 
@@ -125,12 +172,19 @@ def _acquired(dic: dict) -> _dt.datetime | None:
 def load_processed(zip_path: str, **overrides) -> Spectrum:
     """The instrument-processed spectrum (`pdata/1`) of one experiment."""
     expdir = experiment_dir(zip_path)
-    dic, y = ng.bruker.read_pdata(os.path.join(expdir, "pdata", "1"))
+    dic, y = ng.bruker.read_pdata(str(Path(expdir, "pdata", "1")))
     uc = ng.fileiobase.uc_from_udic(ng.bruker.guess_udic(dic, y))
     info = {**_meta_from(zip_path, None), **overrides}
-    return Spectrum(ppm=uc.ppm_scale(), y=np.asarray(y, dtype=float), acquired=_acquired(dic),
-                    sf=float(dic["procs"]["SF"]), folder=os.path.basename(os.path.dirname(expdir)),
-                    expdir=expdir, processing="pdata", **info)
+    return Spectrum(
+        ppm=uc.ppm_scale(),
+        y=np.asarray(y, dtype=float),
+        acquired=_acquired(dic),
+        sf=float(dic["procs"]["SF"]),
+        folder=Path(expdir).parent.name,
+        expdir=expdir,
+        processing="pdata",
+        **info,
+    )
 
 
 def load_fid(zip_path: str) -> tuple[dict, np.ndarray, Spectrum]:
@@ -138,13 +192,21 @@ def load_fid(zip_path: str) -> tuple[dict, np.ndarray, Spectrum]:
     expdir = experiment_dir(zip_path)
     dic, fid = ng.bruker.read(expdir)
     info = _meta_from(zip_path, None)
-    template = Spectrum(ppm=np.array([]), y=np.array([]), acquired=_acquired(dic),
-                        sf=float(dic["acqus"]["SFO1"]), folder=os.path.basename(os.path.dirname(expdir)),
-                        expdir=expdir, processing="raw", **info)
+    template = Spectrum(
+        ppm=np.array([]),
+        y=np.array([]),
+        acquired=_acquired(dic),
+        sf=float(dic["acqus"]["SFO1"]),
+        folder=Path(expdir).parent.name,
+        expdir=expdir,
+        processing="raw",
+        **info,
+    )
     return dic, fid, template
 
 
-def load_series(record: str, sample: str, acid: str | None = "K", nucleus: str = "1H",
-                times="all", quiet: bool = False) -> list[Spectrum]:
+def load_series(
+    record: str, sample: str, acid: str | None = "K", nucleus: str = "1H", times="all", quiet: bool = False
+) -> list[Spectrum]:
     """Fetch and load one sample's time series (instrument-processed), first time point first."""
     return [load_processed(p) for p in _data.fetch(record, sample, acid, nucleus, times, quiet=quiet)]

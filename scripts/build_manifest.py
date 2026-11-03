@@ -5,86 +5,116 @@ offset, size and CRC, and the sample, acid, time point and nucleus read from its
 `nmrtrain.data.fetch` pulls one spectrum with a single HTTP range request and verifies it.
 
 Usage:
-    python scripts/build_manifest.py                      # reads the archives from Zenodo by range
-    python scripts/build_manifest.py --local DIR [DIR..]  # reads local copies of the archives instead
+    uv run scripts/build_manifest.py                      # reads the archives from Zenodo by range
+    uv run scripts/build_manifest.py --local DIR [DIR..]  # reads local copies of the archives instead
 
 Local copies must be byte-identical to the Zenodo files (the script checks the size).
 """
+
 from __future__ import annotations
 
 import argparse
 import io
 import json
-import os
 import re
-import sys
 import zipfile
+from pathlib import Path, PurePosixPath
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from nmrtrain.data import RECORDS, HttpRangeFile, _record_file_url  # noqa: E402
+from nmrtrain.data import RECORDS, HttpRangeFile, _record_file_url
 
-OUT = os.path.join(os.path.dirname(__file__), "..", "nmrtrain", "manifests")
+OUT = Path(__file__).resolve().parent.parent / "nmrtrain" / "manifests"
+READ_BUFFER = 1 << 16
+
+# 11223995: everything is in the file name.
+_DIPEPTIDE_NAME = re.compile(r"SZSSea-([A-Z]{2})-([HK])-(\w+?)-(1H|13C)-\d+_\d+\.zip$")
+_REPEAT_OF = {"4MonthR": "4Month"}
 
 # 8381013: the folder says the acid and the time point; the file name says the amino acid and nucleus.
 _AA_FOLDER = re.compile(r"aa 1H(?: and 13C)? (81|98) (1day|1week|1month) original data$")
+_AA_NAME = re.compile(r"SZSSea-([A-Z]{3})-(?:H-)?(?:(\d+day|1month)-)?D2SO?4?lock-(1H|13C|13H)-")
 _ACID = {"98": "K", "81": "H"}
+
+# 11122291: the mechanism study; dataset S5 is not used by the notebooks.
+_MECHANISM_NAME = re.compile(r"SZSSea-(AA\+A|AA|LAlaninamide|LGlycinamide)-(?:([HK])-)?(?:(1Week)-)?(1H|13C)-")
+
+
+def _fields(sample: str, acid: str, time: str, group: str, nucleus: str, repeat: bool = False) -> dict:
+    return {"sample": sample, "acid": acid, "time": time, "time_group": group, "nucleus": nucleus, "repeat": repeat}
+
+
+def _parse_dipeptide(name: str, _folder: str) -> dict | None:
+    m = _DIPEPTIDE_NAME.match(name)
+    if not m:
+        return None
+    sample, acid, time, nuc = m.groups()
+    return _fields(sample, acid, time, _REPEAT_OF.get(time, time), nuc, repeat=time.endswith("R"))
+
+
+def _parse_amino_acid(name: str, folder: str) -> dict | None:
+    fm = _AA_FOLDER.search(folder)
+    if not fm:
+        return None  # contaminant tests and modified amino acids: not used by the notebooks
+    acid, group = _ACID[fm.group(1)], fm.group(2)
+    m = _AA_NAME.match(name)
+    if not m:
+        return None
+    sample, time, nuc = m.groups()
+    nuc = "1H" if nuc == "13H" else nuc  # one file is named 13H; it is a 1H experiment
+    return _fields(sample, acid, time or group, group, nuc)
+
+
+def _parse_mechanism(name: str, folder: str) -> dict | None:
+    m = _MECHANISM_NAME.match(name)
+    if not m or "Dataset S5" in folder:
+        return None
+    sample, acid, time, nuc = m.groups()
+    return _fields(sample, acid or "K", time or "ref", time or "ref", nuc)
+
+
+_PARSERS = {"11223995": _parse_dipeptide, "8381013": _parse_amino_acid, "11122291": _parse_mechanism}
 
 
 def parse(record: str, path: str) -> dict | None:
-    name = os.path.basename(path)
-    folder = os.path.dirname(path)
-    if record == "11223995":
-        m = re.match(r"SZSSea-([A-Z]{2})-([HK])-(\w+?)-(1H|13C)-\d+_\d+\.zip$", name)
-        if not m:
-            return None
-        sample, acid, time, nuc = m.groups()
-        group = {"4MonthR": "4Month"}.get(time, time)
-        return {"sample": sample, "acid": acid, "time": time, "time_group": group, "nucleus": nuc,
-                "repeat": time.endswith("R")}
-    if record == "8381013":
-        fm = _AA_FOLDER.search(folder)
-        if not fm:
-            return None  # contaminant tests and modified amino acids: not used by the notebooks
-        acid, group = _ACID[fm.group(1)], fm.group(2)
-        m = re.match(r"SZSSea-([A-Z]{3})-(?:H-)?(?:(\d+day|1month)-)?D2SO?4?lock-(1H|13C|13H)-", name)
-        if not m:
-            return None
-        sample, time, nuc = m.groups()
-        nuc = "1H" if nuc == "13H" else nuc  # one file is named 13H; it is a 1H experiment
-        return {"sample": sample, "acid": acid, "time": time or group, "time_group": group, "nucleus": nuc,
-                "repeat": False}
-    if record == "11122291":
-        m = re.match(r"SZSSea-(AA\+A|AA|LAlaninamide|LGlycinamide)-(?:([HK])-)?(?:(1Week)-)?(1H|13C)-", name)
-        if not m or "Dataset S5" in folder:
-            return None
-        sample, acid, time, nuc = m.groups()
-        return {"sample": sample, "acid": acid or "K", "time": time or "ref", "time_group": time or "ref",
-                "nucleus": nuc, "repeat": False}
-    return None
+    """The sample, acid, time point and nucleus of one inner zip, or None if the notebooks skip it."""
+    parser = _PARSERS.get(record)
+    p = PurePosixPath(path)
+    return parser(p.name, str(p.parent) if str(p.parent) != "." else "") if parser else None
+
+
+def _open_archive(record: str, local_dirs: list[str]):
+    """A local copy of the record's archive if one has the right size, else a range reader on Zenodo."""
+    info = RECORDS[record]
+    for d in local_dirs:
+        for cand in (Path(d, info["file"]), Path(d, info["file"].replace(" ", "_"))):
+            if cand.exists() and cand.stat().st_size == info["size"]:
+                print(f"{record}: reading local copy {cand}")
+                return cand.open("rb")
+    print(f"{record}: reading the archive's directory from Zenodo by range")
+    return io.BufferedReader(HttpRangeFile(_record_file_url(record)), buffer_size=READ_BUFFER)
+
+
+def _entry(zi: zipfile.ZipInfo, fields: dict) -> dict:
+    return {
+        "path": zi.filename,
+        "name": PurePosixPath(zi.filename).name,
+        "offset": zi.header_offset,
+        "compress_size": zi.compress_size,
+        "size": zi.file_size,
+        "compress_type": zi.compress_type,
+        "crc": zi.CRC,
+        **fields,
+    }
 
 
 def build(record: str, local_dirs: list[str]) -> dict:
+    """The manifest of one record."""
     info = RECORDS[record]
-    fh = None
-    for d in local_dirs:
-        for cand in (os.path.join(d, info["file"]), os.path.join(d, info["file"].replace(" ", "_"))):
-            if os.path.exists(cand) and os.path.getsize(cand) == info["size"]:
-                fh = open(cand, "rb")
-                print(f"{record}: reading local copy {cand}")
-    if fh is None:
-        print(f"{record}: reading the archive's directory from Zenodo by range")
-        fh = io.BufferedReader(HttpRangeFile(_record_file_url(record)), buffer_size=1 << 16)
-    members = []
-    with zipfile.ZipFile(fh) as z:
-        for zi in z.infolist():
-            if not zi.filename.endswith(".zip"):
-                continue
-            fields = parse(record, zi.filename)
-            if not fields:
-                continue
-            members.append({"path": zi.filename, "name": os.path.basename(zi.filename),
-                            "offset": zi.header_offset, "compress_size": zi.compress_size,
-                            "size": zi.file_size, "compress_type": zi.compress_type, "crc": zi.CRC, **fields})
+    with _open_archive(record, local_dirs) as fh, zipfile.ZipFile(fh) as z:
+        members = [
+            _entry(zi, fields)
+            for zi in z.infolist()
+            if zi.filename.endswith(".zip") and (fields := parse(record, zi.filename))
+        ]
     return {"record": record, "file": info["file"], "file_size": info["size"], "members": members}
 
 
@@ -93,13 +123,12 @@ def main() -> None:
     ap.add_argument("--local", nargs="*", default=[], help="folders holding local copies of the archives")
     ap.add_argument("records", nargs="*", default=list(RECORDS))
     args = ap.parse_args()
-    os.makedirs(OUT, exist_ok=True)
+    OUT.mkdir(parents=True, exist_ok=True)
     for record in args.records:
         manifest = build(record, args.local)
-        path = os.path.join(OUT, f"{record}.json")
-        with open(path, "w") as out:
-            json.dump(manifest, out, indent=0, sort_keys=True)
-        print(f"  wrote {os.path.relpath(path)}: {len(manifest['members'])} spectra")
+        path = OUT / f"{record}.json"
+        path.write_text(json.dumps(manifest, indent=0, sort_keys=True) + "\n")
+        print(f"  wrote {path.relative_to(OUT.parent.parent)}: {len(manifest['members'])} spectra")
 
 
 if __name__ == "__main__":

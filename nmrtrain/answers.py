@@ -1,8 +1,9 @@
-"""Answer keys, shipped as plain JSON in `answer_keys/` (installed as `nmrtrain.answer_keys`).
+"""Answer keys, shipped as plain JSON in `nmrtrain/answer_keys/`.
 
 A key holds only calls that a published paper states, each with its source. Every other case has
 no key: the feedback then points the member to the paper's own tables and never grades.
 """
+
 from __future__ import annotations
 
 import json
@@ -19,14 +20,17 @@ CHECK_AGAINST = {
 }
 
 
+KEYS = resources.files("nmrtrain") / "answer_keys"
+
+
 def available() -> list[str]:
-    return sorted(p.name[:-5] for p in resources.files("nmrtrain.answer_keys").iterdir()
-                  if p.name.endswith(".json"))
+    """The names of the keys shipped with the package."""
+    return sorted(p.name.removesuffix(".json") for p in KEYS.iterdir() if p.name.endswith(".json"))
 
 
 def load(name: str, quiet: bool = False) -> dict:
     """Load a key by name (for example "capstone"). A name with no key file gives an empty key."""
-    path = resources.files("nmrtrain.answer_keys").joinpath(f"{name}.json")
+    path = KEYS / f"{name}.json"
     key = json.loads(path.read_text()) if path.is_file() else {"cases": {}}
     key.setdefault("check_against", CHECK_AGAINST.get(name, "the paper's tables"))
     if not quiet:
