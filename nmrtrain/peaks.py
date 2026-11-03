@@ -54,7 +54,9 @@ def _signal(lines: list[tuple[float, float]]) -> dict:
     return {"ppm": round(float(centre_ppm), 3), "lines": len(lines), "height": round(float(tallest), 3)}
 
 
-def pick_peaks(spectrum: Spectrum, low_ppm: float = 1.0, high_ppm: float = 6.5, min_height: float = 0.03) -> list[dict]:
+def pick_peaks(
+    spectrum: Spectrum, low_ppm: float = READ_PPM[0], high_ppm: float = READ_PPM[1], min_height: float = 0.03
+) -> list[dict]:
     """Signals between two ppm values, high ppm first: [{"ppm", "lines", "height"}].
 
     min_height is a share of the tallest point in the region. Lines closer than GROUP_PPM merge into
