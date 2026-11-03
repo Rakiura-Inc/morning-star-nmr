@@ -1,4 +1,4 @@
-"""Peak picking, trap checks and feedback on synthetic spectra."""
+"""Trap checks and feedback on synthetic spectra. The peak picking itself: test_notebook_methods.py."""
 
 import datetime as dt
 import re
@@ -14,28 +14,10 @@ AA_1DAY = [(5.30, 0.5), (4.70, 0.5), (2.285, 1.0), (2.267, 1.0), (1.791, 1.0), (
 AA_4MO = [(6.10, 0.06), (6.03, 0.06), (4.72, 0.5), (2.29, 1.0), (2.272, 1.0)]
 
 
-def test_pick_merges_a_doublet_and_orders_high_to_low():
-    pk = nt.peaks.pick(synthetic(AA_1DAY))
-    assert [round(p["ppm"], 2) for p in pk] == [5.3, 4.7, 2.28, 1.78]
-    assert pk[2]["lines"] == 2
-
-
-def test_compare_kept_lost_new():
-    a, b = nt.peaks.pick(synthetic(AA_1DAY)), nt.peaks.pick(synthetic(AA_4MO))
-    c = nt.peaks.compare(a, b)
-    assert [round(p, 2) for p in c["lost"]] == [5.3, 1.78]
-    assert [round(p, 2) for p in c["new"]] == [6.1, 6.03]
-
-
-def test_pick_ref_region_ignores_noise_in_a_quiet_window():
-    s = synthetic([(170.0, 0.001), (16.0, 1.0)], lo=0, hi=200, acid_ppm=None, nucleus="13C", width=0.2, n=40000)
-    assert nt.peaks.pick(s, 160, 185, 0.05, group_ppm=0.5, ref=(5, 200)) == []
-
-
 def test_axis_check_ok_and_mirrored():
     ok = synthetic(AA_1DAY)
     assert nt.checks.check_axis(ok).kind == "ok"
-    mirrored = ok.with_data(ok.ppm, ok.y[::-1])
+    mirrored = ok.with_data(ok.ppm, ok.intensity[::-1])
     fb = nt.checks.check_axis(mirrored)
     assert fb.kind == "trap" and "reversed" in fb.text
 
@@ -102,7 +84,6 @@ SYNTH = {
         {"ppm": 2.50, "group": "kept", "what": "a kept test peak", "backbone": True},
         {"ppm": 6.00, "group": "new", "what": "a small test peak", "optional": True},
     ],
-    "expect": {"1day": {"present": [3.10, 2.50], "absent": []}, "4Month": {"present": [4.20, 2.50], "absent": [3.10]}},
 }
 DIPEPTIDE_TABLES = "Check your decision against Table 1 (81%) and Table 2 (98%) of the paper"
 GRADING = re.compile(r"\b(correct|incorrect|wrong|score|points|grade)\b|\d%", re.IGNORECASE)
@@ -122,7 +103,7 @@ def test_published_call_is_compared_with_its_source():
 
 def test_slips_get_targeted_feedback():
     rep = nt.checks.check_verdict(
-        {"call": "degrades", "lost_ppm": [11.43, 7.0], "new_ppm": [7.80], "kept_ppm": [3.10]}, SYNTH, sample="XX"
+        {"call": "degrades", "lost_ppm": [11.43, 7.0], "new_ppm": [7.80], "kept_ppm": [3.10]}, SYNTH
     )
     text = "\n".join(map(str, rep))
     assert "acid's own signal" in text
@@ -139,14 +120,6 @@ def test_cited_values_with_no_key_signals_are_left_for_the_reviewer():
     text = "\n".join(map(str, rep))
     assert "acid's own signal" in text
     assert "no signal in the key" not in text and "could also cite" not in text
-
-
-def test_peak_list_check_on_a_synthetic_key():
-    mine = {"1day": [{"ppm": 3.11}, {"ppm": 2.50}], "4Month": [{"ppm": 2.49}, {"ppm": 3.10}]}
-    rep = nt.checks.check_peak_list(mine, SYNTH)
-    kinds = [f.kind for f in rep]
-    assert kinds[0] == "agrees"
-    assert any("no peak near 4.20" in f.text for f in rep) and any("3.10 should be gone" in f.text for f in rep)
 
 
 def test_feedback_never_grades():
@@ -290,46 +263,25 @@ def test_a_case_with_no_key_points_to_the_paper_tables(capsys):
     assert all(f.kind in ("open", "to do", "note") for f in rep)
 
 
-def test_how_much_is_left_is_measured_against_the_acid_peak():
-    first = synthetic(AA_1DAY)
-    half = synthetic([(p, h * 0.5) for p, h in AA_1DAY], time="8day")
-    gone = synthetic([(p, h * 0.1) for p, h in AA_1DAY], time="4Month")
-    left = nt.peaks.left_of_first([first, half, gone], (1.75, 1.81))
-    assert left[0] == 1.0 and abs(left[1] - 0.5) < 0.02 and abs(left[2] - 0.1) < 0.02
-    assert [nt.peaks.left_band(x) for x in (1.5, 1.0, 0.5, 0.34, 0.33, 0.0)] == [
-        "no clear loss",
-        "no clear loss",
-        "no clear loss",
-        "no clear loss",
-        "little or none",
-        "little or none",
-    ]
-    assert nt.checks.LEFT == ("little or none", "no clear loss", "unsure")
-
-
-def test_survival_compares_the_molecules_own_peaks():
-    first = synthetic(AA_1DAY)
-    # The whole molecule halves (both alphas together): its own peaks keep their sizes relative to each other.
-    both = synthetic([(p, h * 0.5) for p, h in AA_1DAY], time="8day")
-    # Only the alpha near 5.30 ppm falls: the ratio to the other alpha falls with it.
-    one = synthetic([(p, h * (0.2 if p > 5 else 1.0)) for p, h in AA_1DAY], time="4Month")
-    own = nt.peaks.against_own_peak([first, both, one], (5.25, 5.35), (4.65, 4.75))
-    assert own[0] == 1.0 and abs(own[1] - 1.0) < 0.02 and abs(own[2] - 0.2) < 0.02
-    assert abs(nt.peaks.second_peak_ppm(first, 1.0, 6.5, away_from=2.28) - 1.78) < 0.03
-
-
-def test_line_differences_find_the_largest_shift():
-    inst = synthetic(AA_1DAY)
-    mine = synthetic([(p + (0.004 if p > 5 else 0.0), h) for p, h in AA_1DAY])
-    d = nt.peaks.line_differences(mine, inst)
-    assert abs(d["largest_ppm"] - 0.004) < 0.001 and abs(d["at_ppm"] - 5.30) < 0.002 and d["lines"] == 6
-    assert nt.checks.line_feedback(d).kind == "agrees"
-    far = nt.peaks.line_differences(synthetic([(p + 0.05, h) for p, h in AA_1DAY]), inst)
-    assert nt.checks.line_feedback(far).kind == "look again"
-
-
 def test_saved_says_an_empty_answer_is_not_saved_yet(capsys):
     nt.record.saved("ALA_PEAKS_PPM", [], "the peaks your call on alanine rests on")
     assert capsys.readouterr().out.startswith("Not saved yet ALA_PEAKS_PPM = []")
     nt.record.saved("ALA_PEAKS_PPM", [1.98, 4.62], "the peaks your call on alanine rests on")
     assert capsys.readouterr().out.startswith("Saved ALA_PEAKS_PPM = [1.98, 4.62]")
+
+
+def test_matches_published_for_the_results_table():
+    case = nt.answers.case(KEY, "AA")
+    assert nt.checks.matches_published({"call": "breaks down"}, case) == "yes"
+    assert nt.checks.matches_published({"call": "survives"}, case) == "no"
+    assert nt.checks.matches_published({"call": ""}, case) == "unsure"
+    assert nt.checks.matches_published({"call": "survives"}, {"call": None}) == "unsure"
+
+
+def test_line_width_where_the_peak_has_gone_is_zero_without_a_scipy_warning():
+    import warnings
+
+    slope_only = synthetic([(2.0, 1.0)])  # nothing near 2.1 ppm but the side of the 2.0 ppm peak
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        assert nt.peaks.linewidth_hz(slope_only, 2.1) == 0.0

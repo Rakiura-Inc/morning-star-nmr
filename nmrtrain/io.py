@@ -1,8 +1,9 @@
-"""Load Bruker experiments (one inner zip each) as `Spectrum` objects.
+"""Unpack Bruker experiments and label what nmrglue reads from them.
 
-`load_processed` reads the spectrum the instrument already processed (`pdata/1`): the default for
-every notebook except the raw-processing one. `load_fid` reads the raw signal (the FID) for
-`nmrtrain.process`.
+Reading a spectrum is part of the lesson, so the notebooks call nmrglue themselves
+(`ng.bruker.read_pdata`, `ng.bruker.read`, `ng.fileiobase.uc_from_udic`). This module does the
+plumbing around those calls: it unpacks one inner zip into the data folder, and wraps what nmrglue
+returns in a `Spectrum` that carries the sample, acid and time point from the dataset's manifest.
 
 The ppm scale is the instrument's own. Nothing here re-references a spectrum to the acid peak:
 that peak drifts over the months (see the README).
@@ -10,104 +11,39 @@ that peak drifts over the months (see the README).
 
 from __future__ import annotations
 
-import datetime as _dt
-import re
+import datetime as dt
 import zipfile
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import numpy as np
 
+from . import _nmrglue  # noqa: F401 (silences nmrglue's warnings before the notebooks call it)
 from . import data as _data
-from ._nmrglue import ng
-
-ACID_PCT = {"K": "98%", "H": "81%"}
-ACID_WT_PCT = {"K": 98, "H": 81}
-# The sample codes used in the datasets' file names: two-letter homodipeptides, three-letter amino
-# acids, and the mechanism study's reference compounds.
-NAMES = {
-    "AA": "Ala-Ala",
-    "CC": "Cys-Cys",
-    "DD": "Asp-Asp",
-    "EE": "Glu-Glu",
-    "FF": "Phe-Phe",
-    "GG": "Gly-Gly",
-    "HH": "His-His",
-    "II": "Ile-Ile",
-    "KK": "Lys-Lys",
-    "LL": "Leu-Leu",
-    "MM": "Met-Met",
-    "NN": "Asn-Asn",
-    "PP": "Pro-Pro",
-    "QQ": "Gln-Gln",
-    "RR": "Arg-Arg",
-    "SS": "Ser-Ser",
-    "TT": "Thr-Thr",
-    "VV": "Val-Val",
-    "WW": "Trp-Trp",
-    "YY": "Tyr-Tyr",
-    "ALA": "alanine",
-    "ARG": "arginine",
-    "ASN": "asparagine",
-    "ASP": "aspartic acid",
-    "CYS": "cysteine",
-    "GLN": "glutamine",
-    "GLU": "glutamic acid",
-    "GLY": "glycine",
-    "HIS": "histidine",
-    "ILE": "isoleucine",
-    "LEU": "leucine",
-    "LYS": "lysine",
-    "MET": "methionine",
-    "PHE": "phenylalanine",
-    "PRO": "proline",
-    "SER": "serine",
-    "THR": "threonine",
-    "TRP": "tryptophan",
-    "TYR": "tyrosine",
-    "VAL": "valine",
-    "OSulfLSer": "O-sulfoserine",
-    "LAlaninamide": "L-alaninamide",
-    "LGlycinamide": "L-glycinamide",
-    "AA+A": "Ala-Ala + alanine",
-}
-
-
-# The steps say "glycine" and "98% acid"; the file names say GLY and K. `load_series` takes either.
-SAMPLE_CODES = {name: code for code, name in NAMES.items()}
-ACID_CODES = {pct: code for code, pct in ACID_PCT.items()}
-
-
-def time_label(t: str) -> str:
-    """'4Month' -> '4 months', '1day' -> '1 day', 'ref' -> 'reference'."""
-    if t == "ref":
-        return "reference"
-    m = re.match(r"(\d+)\s*([A-Za-z]+?)(R?)$", t)
-    if not m:
-        return t
-    n, unit, rep = int(m.group(1)), m.group(2).lower().rstrip("s"), m.group(3)
-    return f"{n} {unit}{'s' if n != 1 else ''}" + (" (repeat)" if rep else "")
+from .names import ACID_STRENGTH, sample_name, time_label
 
 
 @dataclass
 class Spectrum:
-    ppm: np.ndarray  # chemical shift axis, high to low
-    y: np.ndarray  # intensity (real part)
-    sample: str = "?"
-    acid: str = "?"
-    time: str = "?"
+    """One spectrum: its ppm axis (high to low), its intensity, and where it came from."""
+
+    ppm: np.ndarray
+    intensity: np.ndarray  # the real part of the spectrum
+    sample: str = "?"  # the dataset's code, such as "AA"; sample_name gives the words
+    acid: str = "?"  # "K" (98%) or "H" (81%)
+    time: str = "?"  # the time label in the file name, such as "4Month"
     nucleus: str = "1H"
-    acquired: _dt.datetime | None = None
-    sf: float = 400.0  # spectrometer frequency in MHz (turns ppm into Hz)
-    name: str = ""  # inner zip name
-    folder: str = ""  # experiment folder name inside the zip
-    expdir: str = ""
-    processing: str = "pdata"  # "pdata" (instrument) or "raw" (processed here)
+    acquired: dt.datetime | None = None  # when the instrument recorded it
+    spectrometer_mhz: float = 400.0  # turns ppm into Hz: 1 ppm is this many Hz
+    name: str = ""  # the inner zip's file name
+    folder: str = ""  # the experiment folder's name inside the zip
+    experiment_folder: str = ""  # where the experiment is unpacked on this computer
+    processing: str = "pdata"  # "pdata" (the instrument's) or "raw" (processed in the notebook)
     meta: dict = field(default_factory=dict, repr=False)
 
     @property
     def sample_name(self) -> str:
-        return NAMES.get(self.sample, self.sample)
+        return sample_name(self.sample)
 
     @property
     def time_label(self) -> str:
@@ -115,110 +51,101 @@ class Spectrum:
 
     @property
     def label(self) -> str:
-        acid = f" in {ACID_PCT[self.acid]}" if self.acid in ACID_PCT else ""
-        return f"{self.sample_name}{acid}, {self.time_label}"
+        """For example "Ala-Ala in 98%, 1 day"."""
+        if self.acid in ACID_STRENGTH:
+            return f"{self.sample_name} in {ACID_STRENGTH[self.acid]}, {self.time_label}"
+        return f"{self.sample_name}, {self.time_label}"
 
-    def region(self, lo: float, hi: float) -> tuple[np.ndarray, np.ndarray]:
-        m = (self.ppm >= lo) & (self.ppm <= hi)
-        return self.ppm[m], self.y[m]
+    def region(self, low_ppm: float, high_ppm: float) -> tuple[np.ndarray, np.ndarray]:
+        """The ppm values and intensities between two ppm values (both ends included)."""
+        inside = (self.ppm >= low_ppm) & (self.ppm <= high_ppm)
+        return self.ppm[inside], self.intensity[inside]
 
-    def with_data(self, ppm, y, **changes) -> Spectrum:
-        return replace(self, ppm=np.asarray(ppm), y=np.asarray(y), **changes)
+    def with_data(self, ppm, intensity, **changes) -> Spectrum:
+        """The same labels with a new axis or intensity (for example after shifting the axis)."""
+        return replace(self, ppm=np.asarray(ppm), intensity=np.asarray(intensity), **changes)
 
 
-def _safe_extract(zip_path: str, out: Path) -> None:
+def _unpack(zip_path: str, out: Path) -> None:
     """Unpack a zip into out, refusing any member that would land outside it."""
     root = out.resolve()
-    with zipfile.ZipFile(zip_path) as z:
-        for info in z.infolist():
-            if not (root / info.filename).resolve().is_relative_to(root):
-                msg = f"refusing to unpack {info.filename!r} outside the data folder"
+    with zipfile.ZipFile(zip_path) as archive:
+        for member in archive.infolist():
+            if not (root / member.filename).resolve().is_relative_to(root):
+                msg = f"refusing to unpack {member.filename!r} outside the data folder"
                 raise OSError(msg)
-        z.extractall(out)
+        archive.extractall(out)
 
 
-def _acqus_files(folder: Path) -> list[str]:
-    return sorted(str(p) for p in folder.rglob("acqus"))
+def _acqus_files(folder: Path) -> list[Path]:
+    return sorted(folder.rglob("acqus"))
 
 
-def experiment_dir(zip_path: str) -> str:
-    """Unpack one inner zip (once) and return the folder that holds `acqus`."""
-    out = Path(_data.data_dir(), "_unpacked", Path(zip_path).name[: -len(".zip")])
+def experiment_folder(zip_path: str) -> str:
+    """Unpack one inner zip (once) and return the experiment folder: the one that holds `acqus`.
+
+    nmrglue reads the raw signal from this folder (`ng.bruker.read`) and the instrument's
+    spectrum from its `pdata/1` subfolder (`ng.bruker.read_pdata`)."""
+    out = Path(_data.data_dir(), "_unpacked", Path(zip_path).name.removesuffix(".zip"))
     found = _acqus_files(out)
     if not found:
         out.mkdir(parents=True, exist_ok=True)
-        _safe_extract(zip_path, out)
+        _unpack(zip_path, out)
         found = _acqus_files(out)
     if not found:
         msg = f"{Path(zip_path).name} holds no Bruker experiment (no acqus file)"
         raise FileNotFoundError(msg)
-    return str(Path(found[0]).parent)
+    return str(found[0].parent)
 
 
-def _meta_from(zip_path: str, nucleus: str | None) -> dict:
-    """The labels for one experiment, read from the manifest entry that matches its file name."""
-    m = _data.member_for(zip_path) or {}
-    return {
-        "sample": m.get("sample", "?"),
-        "acid": m.get("acid", "?"),
-        "time": m.get("time_group", "?"),
-        "nucleus": m.get("nucleus", nucleus or "1H"),
-        "name": Path(zip_path).name,
-        "meta": {"record": m.get("record"), "time_in_name": m.get("time")},
-    }
-
-
-def _acquired(dic: dict) -> _dt.datetime | None:
+def _acquired(dic: dict) -> dt.datetime | None:
+    """When the instrument recorded the experiment, from its acqus DATE (seconds since 1970)."""
     try:
-        return _dt.datetime.fromtimestamp(int(dic["acqus"]["DATE"]), tz=_dt.UTC)
+        return dt.datetime.fromtimestamp(int(dic["acqus"]["DATE"]), tz=dt.UTC)
     except (KeyError, TypeError, ValueError):
         return None
 
 
-def load_processed(zip_path: str, **overrides) -> Spectrum:
-    """The instrument-processed spectrum (`pdata/1`) of one experiment."""
-    expdir = experiment_dir(zip_path)
-    dic, y = ng.bruker.read_pdata(str(Path(expdir, "pdata", "1")))
-    uc = ng.fileiobase.uc_from_udic(ng.bruker.guess_udic(dic, y))
-    info = {**_meta_from(zip_path, None), **overrides}
+def labelled(zip_path: str, dic: dict, ppm, data, *, processing: str = "pdata") -> Spectrum:
+    """A Spectrum from what nmrglue read out of one experiment, with its labels from the manifest.
+
+    dic: nmrglue's parameter dictionary. ppm: the axis. data: the spectrum (its real part is kept).
+    processing: "pdata" for the instrument's spectrum, "raw" for one processed in the notebook."""
+    member = _data.member_for(zip_path) or {}
+    # The instrument's spectrum is scaled with procs SF; a raw signal was recorded at acqus SFO1.
+    spectrometer_mhz = float(dic["procs"]["SF"]) if processing == "pdata" else float(dic["acqus"]["SFO1"])
+    folder = experiment_folder(zip_path)
     return Spectrum(
-        ppm=uc.ppm_scale(),
-        y=np.asarray(y, dtype=float),
+        ppm=np.asarray(ppm),
+        intensity=np.asarray(np.real(data), dtype=float),
+        sample=member.get("sample", "?"),
+        acid=member.get("acid", "?"),
+        time=member.get("time_group", "?"),
+        nucleus=member.get("nucleus", "1H"),
         acquired=_acquired(dic),
-        sf=float(dic["procs"]["SF"]),
-        folder=Path(expdir).parent.name,
-        expdir=expdir,
-        processing="pdata",
-        **info,
+        spectrometer_mhz=spectrometer_mhz,
+        name=Path(zip_path).name,
+        folder=Path(folder).parent.name,
+        experiment_folder=folder,
+        processing=processing,
+        meta={"record": member.get("record"), "time_in_name": member.get("time")},
     )
 
 
-def load_fid(zip_path: str) -> tuple[dict, np.ndarray, Spectrum]:
-    """The raw FID: (Bruker parameters, complex FID, an empty Spectrum carrying the labels)."""
-    expdir = experiment_dir(zip_path)
-    dic, fid = ng.bruker.read(expdir)
-    info = _meta_from(zip_path, None)
-    template = Spectrum(
-        ppm=np.array([]),
-        y=np.array([]),
-        acquired=_acquired(dic),
-        sf=float(dic["acqus"]["SFO1"]),
-        folder=Path(expdir).parent.name,
-        expdir=expdir,
-        processing="raw",
-        **info,
+def label_of(zip_path: str) -> str:
+    """The words for one downloaded file, before it is read: "Ala-Ala in 98%, 1 day"."""
+    member = _data.member_for(zip_path) or {}
+    empty = np.array([])
+    spectrum = Spectrum(
+        empty, empty, sample=member.get("sample", "?"), acid=member.get("acid", "?"), time=member.get("time_group", "?")
     )
-    return dic, fid, template
+    return spectrum.label
 
 
-def load_series(
-    record: str, sample: str, acid: str | None = "K", nucleus: str = "1H", times="all", quiet: bool = False
-) -> list[Spectrum]:
-    """Fetch and load one sample's time series (instrument-processed), first time point first.
+def _recording_date(spectrum: Spectrum) -> dt.datetime:
+    return spectrum.acquired
 
-    sample: the dataset's code ("GLY") or the name the steps use ("glycine").
-    acid: "K" or "98%", "H" or "81%"; None for both.
-    """
-    sample = SAMPLE_CODES.get(sample, sample)
-    acid = ACID_CODES.get(acid, acid)
-    return [load_processed(p) for p in _data.fetch(record, sample, acid, nucleus, times, quiet=quiet)]
+
+def by_recording_date(spectra: list[Spectrum]) -> list[Spectrum]:
+    """The spectra in the order the instrument recorded them, first first."""
+    return sorted(spectra, key=_recording_date)

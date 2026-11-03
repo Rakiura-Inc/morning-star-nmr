@@ -1,0 +1,5 @@
+extend = "../ruff.toml"
+# Colab on a laptop shows about 100 characters (teaching-code style F6).
+line-length = 100
+# nmrtrain is this repository's own package, imported in a group of its own.
+src = [".."]

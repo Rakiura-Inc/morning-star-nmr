@@ -95,22 +95,58 @@ select = [
     # https://docs.astral.sh/ruff/rules/#warning-w
     # https://github.com/PyCQA/pycodestyle
     "W",
+    # The engineering gate's size limits (build-lab-bootcamp engineering-gate.md): short functions
+    # with few arguments, named numbers in comparisons.
+    # https://docs.astral.sh/ruff/rules/#mccabe-c90 and https://docs.astral.sh/ruff/rules/#refactor-plr
+    "C90",
+    "PLR0911",
+    "PLR0912",
+    "PLR0913",
+    "PLR0915",
+    "PLR0917",
+    "PLR2004",
 
 ]
 ignore = [
     # Absolute imports are not always better than relative imports.
     # https://docs.astral.sh/ruff/rules/relative-imports/
     "TID252",
+    # Teaching-code style F1: a plain loop reads better than a comprehension that nests or holds a
+    # condition, and our readers are scientists first. https://docs.astral.sh/ruff/rules/manual-list-comprehension/
+    "PERF401",
 ]
+
+[lint.mccabe]
+max-complexity = 10
+
+[lint.pylint]
+max-args = 6
+max-positional-args = 4  # past this, callers pass by keyword (teaching-code style F7)
+max-branches = 12
+max-returns = 6
+max-statements = 40
 
 [lint.per-file-ignores]
 # Use of "assert" is normal and expected in the test files.
 # https://docs.astral.sh/ruff/rules/assert/
-"**/tests/**" = ["S101"]
+"**/tests/**" = [
+    "S101",
+    # An assert compares with the value the test expects; naming each one would hide it.
+    "PLR2004",
+    # synthetic() builds a test spectrum from one keyword per property.
+    "PLR0913",
+    "PLR0917",
+]
 # The notebooks, the maintainer scripts and the package's feedback all talk to the reader by printing.
 # nmrtrain prints its feedback lines straight into the member's notebook; that output is the interface.
 "notebooks/*.ipynb" = [
     "T201",
+    # zip() in a cell pairs lists built from the same spectra a line above; strict=True is noise there.
+    "B905",
+    # A plotting function in a cell takes a figure's settings, as matplotlib's own functions do.
+    # check_cells.py, not ruff, measures the notebooks (engineering gate).
+    "PLR0913",
+    "PLR0917",
     # Each hand-in cell ends with `# nt.portal.submit()`, commented out on purpose: the member turns it on.
     "ERA001",
 ]

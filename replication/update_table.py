@@ -27,7 +27,8 @@ TABLE = HERE / "replications.csv"
 README = HERE / "README.md"
 SCHEMA = json.loads((HERE / "schema.json").read_text())
 COLUMNS = [c["name"] for c in SCHEMA["columns"]]
-DIPEPTIDES = [code for code in nt.io.NAMES if len(code) == 2]  # the 20 homodipeptides, AA to YY
+DIPEPTIDE_CODE_LENGTH = 2  # the homodipeptides' codes are two letters: AA to YY
+DIPEPTIDES = [code for code in nt.names.SAMPLE_NAMES if len(code) == DIPEPTIDE_CODE_LENGTH]
 VERDICTS = {"survives", "degrades", "side chain modified", "unsure"}
 PUBLIC_DOI = nt.record.DIPEPTIDE_DOI
 BEGIN, END = "<!-- grid:begin -->", "<!-- grid:end -->"
@@ -79,8 +80,8 @@ def add_reference(rows: list[dict]) -> int:
         rows.append({
             "row_id": rid,
             "dipeptide": c["sample"],
-            "dipeptide_name": nt.io.NAMES[c["sample"]],
-            "acid_wt_pct": nt.io.ACID_WT_PCT[c["acid"]],
+            "dipeptide_name": nt.names.sample_name(c["sample"]),
+            "acid_wt_pct": nt.names.ACID_WT_PCT[c["acid"]],
             "acid_code": c["acid"],
             "nucleus": "1H",
             "time_points": f"{c['first']};{c['last']}",

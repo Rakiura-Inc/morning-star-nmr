@@ -27,18 +27,19 @@ def test_o_sulfoserine_is_listed_for_the_serine_extra():
     assert rows[0]["time_group"] == "1day"
 
 
-def test_load_series_takes_the_steps_words(monkeypatch):
+def test_fetch_takes_the_steps_words(monkeypatch):
     asked = {}
 
-    def fake_fetch(record, sample, acid, nucleus, times, quiet=False):
+    def fake_select(record, sample, acid, nucleus, *, times):
         asked.update(sample=sample, acid=acid)
         return []
 
-    monkeypatch.setattr(nt.data, "fetch", fake_fetch)
-    nt.load_series("8381013", "O-sulfoserine", acid="98%")
+    monkeypatch.setattr(nt.data, "select", fake_select)
+    nt.data.fetch("8381013", "O-sulfoserine", acid="98%", quiet=True)
     assert asked == {"sample": "OSulfLSer", "acid": "K"}
-    nt.load_series("8381013", "GLY", acid="H")
+    nt.data.fetch("8381013", "GLY", acid="H", quiet=True)
     assert asked == {"sample": "GLY", "acid": "H"}
+    assert nt.names.sample_name("GG") == "Gly-Gly" and nt.names.time_label("4MonthR") == "4 months (repeat)"
 
 
 def test_select_returns_time_order_not_name_order():

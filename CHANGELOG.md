@@ -1,6 +1,36 @@
 # Changelog
 
 ## Unreleased
+- Readiness audit fixes: one match-rule sentence (the glossary's) in notebooks 01, 02 and 03; the
+  RES-102 brief's "side chain changed" sentence in notebook 01 Part 1; notebook 01 Part 2 downloads
+  Ala-Ala's five spectra (about 2.5 MB); every hand-in box says how to download the files from
+  Colab; "line", not "row", for the filled examples; notebook 05's mechanism summary is folded under
+  Check your reading. Notebook 01 gains the `glygly-reading` hand-in for the NMR project Extra on
+  Gly-Gly (RES-102-D9). `rakiura_steps.json` gives every part its step id (per part; the older
+  per-notebook `"step"` still works) and ships inside the package. The NMRium guide names the
+  Zenodo file "SUPPLEMENTARY DATASETS 1-5.zip" and notebook 01's Parts 2 to 5.
+- Readable teaching code. The analysis each step teaches now sits in the notebooks, in the field's
+  own calls, one idea per cell: reading a spectrum with `ng.bruker.read_pdata` and its ppm scale
+  with `ng.fileiobase.uc_from_udic`; notebook 04's seven steps with `ng.bruker.remove_digital_filter`,
+  `ng.proc_base.em`, `zf_size`, `fft`, `ng.proc_autophase.autops` and `rev`; peak picking with
+  scipy's `find_peaks`; stacking with plain matplotlib; kept, lost and new peaks; areas against the
+  acid peak. What each notebook prints and saves is unchanged, apart from one trap line in notebook
+  04 that named the removed `nt.process.reverse` and now names `ng.proc_base.rev`.
+- `nmrtrain` keeps the plumbing only: downloads (`nt.data.fetch`, which takes the steps' words such
+  as "Ala-Ala" and "98%"), unpacking and labels (`nt.io.experiment_folder`, `nt.io.labelled`), the
+  trap checks and feedback, the record boxes, the hand-in and the Rakiura connection. Removed:
+  `nt.process`, `nt.load_series`, `nt.load_processed`, `nt.load_fid`, `nt.plot.stack`,
+  `nt.plot.compare`, `nt.plot.explore` (and the `explore` extra), and the analysis functions in
+  `nt.peaks` (the trap checks keep their own copy, tested against the notebooks'). The sample names
+  moved to `nmrtrain/samples.csv`. `Spectrum.y` is `Spectrum.intensity`, `Spectrum.sf` is
+  `Spectrum.spectrometer_mhz`. Check results are plain lists shown with `nt.checks.show`;
+  `nt.portal.done`, `nt.record.save_rows` and `nt.record.handin` return None. No part id or
+  answer name changed. A figure part ticked without its figure says so ("Progress saved,
+  without the overlay"), and the line-width trap check returns 0 Hz without a scipy warning
+  when the peak has gone from its window.
+- ruff enforces the engineering gate's limits (complexity 10, at most 6 arguments, 4 positional,
+  named numbers in comparisons); notebooks are linted at 100 characters a line;
+  `scripts/check_cells.py` runs as a git hook and in CI.
 - The teaching that left the Morning Star steps (tickets v1) now lives in the notebooks. Notebook 01
   carries the bootcamp's three NMR steps in order: a new Part 0 reads glycine and explains what NMR
   measures, splitting, solvent shifts and fading peaks; a new Part 1 judges alanine over a month

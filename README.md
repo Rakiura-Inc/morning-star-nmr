@@ -2,8 +2,9 @@
 
 Python notebooks for reading NMR stability data, using the public spectra behind three open papers
 on molecules in concentrated sulfuric acid (the Venus cloud question). A small package, `nmrtrain`,
-fetches, loads, processes and plots the spectra and runs the checks. The judgment stays in the
-notebooks: what to compare, what the peaks say, and the verdict.
+fetches and caches the spectra, labels them, runs the checks and saves the hand-in. The analysis
+stays in the notebooks, in the field's own calls (nmrglue, scipy, numpy, matplotlib), and so does
+the judgment: what to compare, what the peaks say, and the verdict.
 
 > **Answer keys:** the notebooks compare a verdict only with calls the papers state (Ala-Ala and
 > Gly-Gly in 98% acid). For every other case, members check their call against the paper's
@@ -129,15 +130,17 @@ notebooks carry no Rakiura ids). Full list with descriptions: `notebooks/rakiura
 
 | Notebook | Project | Parts |
 |---|---|---|
-| 01 | ONB-102 | `capstone-predict`, `alanine-verdict`, `capstone-stack`, `capstone-compare`, `capstone-verdict` |
+| 01 | ONB-102 | `capstone-predict`, `alanine-verdict`, `capstone-stack`, `capstone-compare`, `capstone-verdict`; `glygly-reading` (the RES-102 Extra on Gly-Gly) |
 | 02 | RES-102 | `dipeptide-stack`, `dipeptide-verdict` |
 | 03 | RES-102 | `amino-acid-stack`, `amino-acid-verdict`, `serine-verdict` |
 | 04 | RES-102 | `raw-overlay` |
 | 05 | RES-102 | `c13-verdict` |
 
-**Step ids** are needed only to stage the verdict file. Set `"step"` per notebook in
-`notebooks/rakiura_steps.json` (for example `"ONB-102-D7"`), or `RAKIURA_STEP` for one session,
-or point `NMRTRAIN_STEPS` at another file. Left `null`, members attach `verdict.json` by hand.
+**Step ids** are needed only to stage the verdict file. Each part in `notebooks/rakiura_steps.json`
+names its step (for example `"capstone-verdict": {"step": "ONB-102-D7", ...}`); a `"step"` beside
+`"parts"` (the older format) still covers every part that names none. `RAKIURA_STEP` overrides both
+for one session, and `NMRTRAIN_STEPS` points at another file. The file ships inside the package, so
+Colab finds it. A part with no step: members attach `verdict.json` by hand.
 Research projects still close other members' threads on first approval (D19), so notebooks 02
 to 05 need per-member mode before many members hand in on one step.
 

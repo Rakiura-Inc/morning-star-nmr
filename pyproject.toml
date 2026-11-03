@@ -29,9 +29,6 @@ dependencies = [
     "scipy>=1.11,<2",
 ]
 
-[project.optional-dependencies]
-explore = [ "plotly>=5,<8" ]
-
 [project.urls]
 Homepage = "https://github.com/Rakiura-Inc/morning-star-nmr"
 Source = "https://github.com/Rakiura-Inc/morning-star-nmr"
@@ -65,8 +62,12 @@ run = [
     "nbformat==5.11.1",
 ]
 
+# Colab installs the wheel, which has no notebooks/ folder: ship the step ids inside the package.
+[tool.hatch.build.targets.wheel.force-include]
+"notebooks/rakiura_steps.json" = "nmrtrain/rakiura_steps.json"
+
 [tool.hatch.build.targets.sdist]
-include = [ "nmrtrain", "tests", "CHANGELOG.md", "CITATION.cff" ]
+include = [ "nmrtrain", "tests", "CHANGELOG.md", "CITATION.cff", "notebooks/rakiura_steps.json" ]
 
 [tool.hatch.build.targets.wheel]
 packages = [ "nmrtrain" ]

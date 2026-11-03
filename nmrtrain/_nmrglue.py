@@ -1,9 +1,10 @@
-"""nmrglue, imported once with its warnings silenced (it warns about every Bruker file it reads)."""
+"""Silence nmrglue's warnings before anything reads a spectrum.
+
+nmrglue warns about every Bruker file it reads (missing optional parameter files), which would bury
+the lines a member needs to read. The notebooks call nmrglue themselves; importing nmrtrain first
+(the setup cell does) puts this filter in place.
+"""
 
 import warnings
 
 warnings.filterwarnings("ignore", module="nmrglue")
-
-import nmrglue as ng  # noqa: E402 (the filter above must be in place before nmrglue loads)
-
-__all__ = ["ng"]

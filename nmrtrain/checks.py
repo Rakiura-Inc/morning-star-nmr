@@ -1,7 +1,8 @@
 """Trap checks and comparisons with published calls. Feedback only: never a score, never "correct" or "wrong".
 
-Every check returns `Feedback` lines. A trap that fires never stops the notebook; it prints one
-line and is counted in the hand-in (`traps_flagged`) so the reviewer sees what the member was told.
+Every check returns `Feedback` lines (one, or a list). A trap that fires never stops the notebook;
+it prints one line and is counted in the hand-in (`traps_flagged`) so the reviewer sees what the
+member was told.
 """
 
 from __future__ import annotations
@@ -14,7 +15,8 @@ import numpy as np
 
 from . import peaks as _peaks
 from .data import RECORDS
-from .io import ACID_PCT, Spectrum, time_label
+from .io import Spectrum
+from .names import ACID_STRENGTH
 
 # The calls a member writes, in plain words. The answer keys and the replication table keep the
 # older words ("degrades", "side chain modified"); both spellings are accepted everywhere.
@@ -37,7 +39,7 @@ CONFIDENCE = ("low", "medium", "high")
 # 98% (K): 11.43 to 11.58 ppm; a few early spectra sit near 11.08 (referenced differently).
 # 81% (H): 11.66 to 12.08 ppm, depending on the sample.
 ACID_WINDOW = {"K": (11.5, 0.5), "H": (11.85, 0.4), None: (11.6, 0.65)}
-ACID_ZONE = _peaks.ACID_AREA  # never cite a peak in here as the sample's own
+ACID_ZONE = _peaks.ACID_REGION_PPM  # never cite a peak in here as the sample's own
 EXCHANGEABLE = (6.3, 9.6)  # NH and NH3+ signals of non-aromatic samples sit here in this acid
 AROMATIC = {"FF", "YY", "WW", "HH", "PHE", "TYR", "TRP", "HIS"}
 ACID_MIN_SHARE = 0.2  # the 10 to 13 ppm peak counts as the acid's when it is at least this share of the tallest
@@ -62,8 +64,8 @@ def key_call(call) -> str:
     return _KEY_WORD.get(c, c)
 
 
-# What each kind of line starts with when printed. The kind itself stays internal.
-PREFIX = {
+# The word a printed line starts with, for each kind of feedback. The kind itself stays internal.
+LEAD_WORDS = {
     "agrees": "Yes.",
     "look again": "Look again.",
     "to do": "To do:",
@@ -77,105 +79,114 @@ PREFIX = {
 
 @dataclass
 class Feedback:
-    kind: str  # agrees | look again | open | to do | tip | note | trap | ok
+    """One line of feedback. kind: agrees, look again, open, to do, tip, note, trap or ok."""
+
+    kind: str
     text: str
 
     def __str__(self) -> str:
-        lead = PREFIX.get(self.kind, "")
-        return f"{lead} {self.text}" if lead else self.text
+        lead = LEAD_WORDS[self.kind]
+        if lead:
+            return f"{lead} {self.text}"
+        return self.text
 
 
-class Report(list):
-    """A list of Feedback lines that prints nicely."""
-
-    def show(self, title: str | None = None) -> Report:
-        if title:
-            print(title)
-        for line in self:
-            print(f"  {line}")
-        if not self:
-            print("  nothing to flag")
-        return self
-
-    def count(self, kind: str) -> int:  # type: ignore[override]
-        return sum(1 for f in self if f.kind == kind)
-
-    def __repr__(self) -> str:
-        return "\n".join(str(f) for f in self) or "(no feedback)"
+def show(feedback: list[Feedback], title: str) -> None:
+    """Print a title, then each feedback line indented under it."""
+    print(title)
+    for line in feedback:
+        print(f"  {line}")
+    if not feedback:
+        print("  nothing to flag")
 
 
 # ---------------------------------------------------------------------------------------------
 # trap checks
 
 
-def acid_ppm(s: Spectrum) -> float:
-    """Position of the tallest peak in 10 to 13 ppm (the acid), or overall if nothing is there."""
-    x, y = s.region(*ACID_ZONE)
-    if y.size and y.max() > ACID_MIN_SHARE * np.max(s.y):
-        return float(x[int(np.argmax(y))])
-    return _peaks.tallest_ppm(s)
+def acid_ppm(spectrum: Spectrum) -> float:
+    """Position of the tallest peak between 10 and 13 ppm (the acid's own peak). On a mirrored axis
+    nothing big sits there, so it falls back to the tallest peak anywhere."""
+    ppm, intensity = spectrum.region(*ACID_ZONE)
+    if intensity.size and intensity.max() > ACID_MIN_SHARE * spectrum.intensity.max():
+        return float(ppm[int(np.argmax(intensity))])
+    return _peaks.tallest_ppm(spectrum)
 
 
-def check_axis(s: Spectrum) -> Feedback:
-    """Is the ppm axis the right way round? 1H: the tallest peak (the acid) must sit near 11.5 ppm.
-    13C: the tallest peak of these molecules sits in the aliphatic band (10 to 60 ppm)."""
-    p = _peaks.tallest_ppm(s)
-    mirror = float(s.ppm.max() + s.ppm.min()) - p
-    if s.nucleus == "13C":
-        lo, hi = C13_TALLEST_BAND
-        if lo <= p <= hi:
-            return Feedback(
-                "ok", f"{s.label}: tallest peak at {p:.1f} ppm, in the aliphatic band. The axis is the right way round."
-            )
-        if lo <= mirror <= hi:
-            return Feedback(
-                "trap",
-                f"{s.label}: the tallest peak is at {p:.1f} ppm, the mirror image of {mirror:.1f}. "
-                "The ppm axis is probably reversed.",
-            )
-        return Feedback("look again", f"{s.label}: the tallest peak is at {p:.1f} ppm. Check the axis.")
-    center, half = ACID_WINDOW.get(s.acid, ACID_WINDOW[None])
-    pct = ACID_PCT.get(s.acid, "this")
-    if abs(p - center) <= half:
-        return Feedback("ok", f"{s.label}: acid peak at {p:.3f} ppm. The axis is the right way round.")
-    if abs(mirror - center) <= half:
+def _check_carbon_axis(spectrum: Spectrum, tallest: float, mirror: float) -> Feedback:
+    """13C: the tallest peak of these molecules sits in the aliphatic band (5 to 65 ppm)."""
+    low, high = C13_TALLEST_BAND
+    if low <= tallest <= high:
+        return Feedback(
+            "ok",
+            f"{spectrum.label}: tallest peak at {tallest:.1f} ppm, in the aliphatic band. "
+            "The axis is the right way round.",
+        )
+    if low <= mirror <= high:
         return Feedback(
             "trap",
-            f"{s.label}: the acid peak is at {p:.2f} ppm here. In {pct} acid it sits near "
-            f"{center:.1f} ppm, so the ppm axis is probably reversed. Use nt.process.reverse "
+            f"{spectrum.label}: the tallest peak is at {tallest:.1f} ppm, the mirror image of {mirror:.1f}. "
+            "The ppm axis is probably reversed.",
+        )
+    return Feedback("look again", f"{spectrum.label}: the tallest peak is at {tallest:.1f} ppm. Check the axis.")
+
+
+def check_axis(spectrum: Spectrum) -> Feedback:
+    """Is the ppm axis the right way round? 1H: the tallest peak (the acid) must sit near 11.5 ppm
+    in 98% acid. 13C: the tallest peak sits in the aliphatic band."""
+    tallest = _peaks.tallest_ppm(spectrum)
+    mirror = float(spectrum.ppm.max() + spectrum.ppm.min()) - tallest  # where it lands if the axis is flipped
+    if spectrum.nucleus == "13C":
+        return _check_carbon_axis(spectrum, tallest, mirror)
+    centre, half_width = ACID_WINDOW.get(spectrum.acid, ACID_WINDOW[None])
+    strength = ACID_STRENGTH.get(spectrum.acid, "this")
+    if abs(tallest - centre) <= half_width:
+        return Feedback("ok", f"{spectrum.label}: acid peak at {tallest:.3f} ppm. The axis is the right way round.")
+    if abs(mirror - centre) <= half_width:
+        return Feedback(
+            "trap",
+            f"{spectrum.label}: the acid peak is at {tallest:.2f} ppm here. In {strength} acid it sits near "
+            f"{centre:.1f} ppm, so the ppm axis is probably reversed. Use ng.proc_base.rev "
             "or load the processed spectrum.",
         )
     return Feedback(
         "look again",
-        f"{s.label}: the tallest peak is at {p:.2f} ppm, not near {center:.1f}. "
+        f"{spectrum.label}: the tallest peak is at {tallest:.2f} ppm, not near {centre:.1f}. "
         "Check the axis and which spectrum this is.",
     )
 
 
-def check_order(series: list[Spectrum], time_order: list[str] | None = None) -> Feedback:
+# Every time label the datasets use, in time order.
+TIME_ORDER = [time for record in RECORDS.values() for time in record["time_order"]]
+
+
+def check_order(series: list[Spectrum]) -> Feedback:
     """Time labels and the instrument's acquisition dates must both increase up the stack."""
-    order = time_order or [t for r in RECORDS.values() for t in r["time_order"]]
-    for a, b in pairwise(series):
-        if a.time in order and b.time in order and order.index(a.time) > order.index(b.time):
+    for earlier, later in pairwise(series):
+        both_known = earlier.time in TIME_ORDER and later.time in TIME_ORDER
+        if both_known and TIME_ORDER.index(earlier.time) > TIME_ORDER.index(later.time):
             return Feedback(
                 "trap",
-                f"Your stack is not in time order: {a.time_label} comes before {b.time_label}. "
+                f"Your stack is not in time order: {earlier.time_label} comes before {later.time_label}. "
                 "Put the spectra in time order before comparing.",
             )
-        if a.acquired and b.acquired and a.acquired > b.acquired:
+        if earlier.acquired and later.acquired and earlier.acquired > later.acquired:
             return Feedback(
                 "trap",
-                f"Your stack is not in time order: {a.time_label} was recorded after "
-                f"{b.time_label}. Put the spectra in time order before comparing.",
+                f"Your stack is not in time order: {earlier.time_label} was recorded after "
+                f"{later.time_label}. Put the spectra in time order before comparing.",
             )
     return Feedback("ok", "The labels and the acquisition dates are both in time order.")
 
 
-def check_drift(series: list[Spectrum], limit: float = 0.2) -> Feedback:
+DRIFT_LIMIT_PPM = 0.2  # more acid-peak drift than this across a series shifts every other peak too
+
+
+def check_drift(series: list[Spectrum]) -> Feedback:
     """How far the acid signal moves across the series."""
-    pos = [acid_ppm(s) for s in series]
-    moved = max(pos) - min(pos)
-    if moved > limit:
+    positions = [acid_ppm(spectrum) for spectrum in series]
+    moved = max(positions) - min(positions)
+    if moved > DRIFT_LIMIT_PPM:
         return Feedback(
             "trap",
             f"The acid peak moved by {moved:.2f} ppm across this series. Some drift is "
@@ -190,8 +201,8 @@ def check_drift(series: list[Spectrum], limit: float = 0.2) -> Feedback:
 
 def check_normalisation(norm: tuple | None, acid: str | None = "K") -> Feedback:
     """Scaling to the whole spectrum (or a region that holds the acid) hides the sample's peaks."""
-    center, _ = ACID_WINDOW.get(acid, ACID_WINDOW[None])
-    if norm is None or (min(norm) <= center <= max(norm)):
+    acid_centre, _ = ACID_WINDOW.get(acid, ACID_WINDOW[None])
+    if norm is None or (min(norm) <= acid_centre <= max(norm)):
         return Feedback(
             "trap",
             "Your traces are scaled to the acid peak, which hides small changes. "
@@ -200,87 +211,96 @@ def check_normalisation(norm: tuple | None, acid: str | None = "K") -> Feedback:
     return Feedback("ok", f"Scaled within {min(norm)} to {max(norm)} ppm.")
 
 
-def check_broad_early(series: list[Spectrum], lo: float = 1.0, hi: float = 6.5, ratio: float = 1.5) -> Feedback:
+BROAD_RATIO = 1.5  # a first peak this many times wider than the later ones counts as broad
+
+
+def check_broad_early(series: list[Spectrum], low_ppm: float = 1.0, high_ppm: float = 6.5) -> Feedback:
     """Is the first spectrum's main peak much broader than later ones?"""
     first = series[0]
-    center = _peaks.tallest_ppm(first, lo, hi)
-    widths = [_peaks.linewidth_hz(s, center)[1] for s in series]
+    centre = _peaks.tallest_ppm(first, low_ppm, high_ppm)
+    widths = [_peaks.linewidth_hz(spectrum, centre) for spectrum in series]
     later = statistics.median(widths[1:]) if len(widths) > 1 else widths[0]
-    if later > 0 and widths[0] > ratio * later:
+    if later > 0 and widths[0] > BROAD_RATIO * later:
         return Feedback(
             "note",
             f"The {first.time_label} peaks are broader than later ones ({widths[0]:.1f} Hz vs "
-            f"{later:.1f} Hz near {center:.2f} ppm). The peaks sharpen after day 1, most likely because "
+            f"{later:.1f} Hz near {centre:.2f} ppm). The peaks sharpen after day 1, most likely because "
             "the hydrogens on nitrogen swap with the acid's deuterium and stop splitting the "
             "peaks next to them. It is not breakdown.",
         )
-    return Feedback("ok", f"Line widths near {center:.2f} ppm: {widths[0]:.1f} Hz first, {later:.1f} Hz later.")
+    return Feedback("ok", f"Line widths near {centre:.2f} ppm: {widths[0]:.1f} Hz first, {later:.1f} Hz later.")
 
 
-def check_signal_loss(
-    first: Spectrum, last: Spectrum, lo: float = 1.0, hi: float = 6.5, min_new_height: float = 0.05
-) -> Feedback:
+MIN_NEW_HEIGHT = 0.05  # a new peak smaller than this share of the tallest does not count here
+MOSTLY_GONE = 0.5  # less than half the first spectrum's signal (against the acid) is left
+
+
+def _signal_against_acid(spectrum: Spectrum, low_ppm: float, high_ppm: float) -> float:
+    """All the sample's signal between two ppm values, divided by the acid peak's area."""
+    acid_area = max(_peaks.peak_area(spectrum, *ACID_ZONE), 1e-12)  # never divide by zero on an empty acid window
+    return _peaks.peak_area(spectrum, low_ppm, high_ppm) / acid_area
+
+
+def check_signal_loss(first: Spectrum, last: Spectrum, low_ppm: float = 1.0, high_ppm: float = 6.5) -> Feedback:
     """Most of the sample's signal gone, relative to the acid, with nothing new: maybe it came out of solution."""
-
-    def amount(s):
-        return _peaks.area(s, lo, hi) / max(_peaks.area(s, *ACID_ZONE), 1e-12)
-
-    kept = amount(last) / amount(first) if amount(first) > 0 else 1.0
-    new = _peaks.compare(
-        _peaks.pick(first, lo, hi), [p for p in _peaks.pick(last, lo, hi) if p["height"] >= min_new_height]
-    )["new"]
-    if kept < 0.5 and not new:
+    first_amount = _signal_against_acid(first, low_ppm, high_ppm)
+    kept = _signal_against_acid(last, low_ppm, high_ppm) / first_amount if first_amount > 0 else 1.0
+    first_ppm = [peak["ppm"] for peak in _peaks.pick_peaks(first, low_ppm, high_ppm)]
+    last_ppm = [peak["ppm"] for peak in _peaks.pick_peaks(last, low_ppm, high_ppm) if peak["height"] >= MIN_NEW_HEIGHT]
+    new = _peaks.compare_peaks(first_ppm, last_ppm)["new"]
+    if kept < MOSTLY_GONE and not new:
         return Feedback(
             "trap",
             "Most of the signal disappeared and nothing new appeared. That can mean the sample "
             "came out of solution rather than reacted. Say so in your hand-in, or answer unsure.",
         )
-    return Feedback(
-        "ok",
-        f"Signal relative to the acid: {kept:.0%} of the first spectrum's"
-        + (f", with {len(new)} new peak(s)." if new else "."),
-    )
+    if new:
+        return Feedback(
+            "ok", f"Signal relative to the acid: {kept:.0%} of the first spectrum's, with {len(new)} new peak(s)."
+        )
+    return Feedback("ok", f"Signal relative to the acid: {kept:.0%} of the first spectrum's.")
 
 
 def run_traps(
-    series: list[Spectrum],
-    norm: tuple | None = (1.0, 6.5),
-    lo: float = 1.0,
-    hi: float = 6.5,
-    title: str | None = None,
-    quiet: bool = False,
-) -> Report:
-    """All the trap checks that apply to one stacked series. Prints them; returns the Report."""
-    rep = Report()
+    series: list[Spectrum], norm: tuple | None = (1.0, 6.5), low_ppm: float = 1.0, high_ppm: float = 6.5
+) -> list[Feedback]:
+    """All the trap checks that apply to one stacked series. Prints the ones that flag something.
+
+    norm: the region the stack was scaled to. low_ppm, high_ppm: the region the member reads."""
+    feedback = [check_axis(spectrum) for spectrum in series]
+    feedback.append(check_order(series))
     if series[0].nucleus == "1H":
-        rep += [check_axis(s) for s in series]
-        rep.append(check_order(series))
-        rep.append(check_drift(series))
-        rep.append(check_normalisation(norm, series[0].acid))
-        rep.append(check_broad_early(series, lo, hi))
-        rep.append(check_signal_loss(series[0], series[-1], lo, hi))
+        feedback.append(check_drift(series))
+        feedback.append(check_normalisation(norm, series[0].acid))
+        feedback.append(check_broad_early(series, low_ppm, high_ppm))
+        feedback.append(check_signal_loss(series[0], series[-1], low_ppm, high_ppm))
+    flagged = [line for line in feedback if line.kind != "ok"]
+    passed = len(feedback) - len(flagged)
+    first = series[0]
+    if first.acid in ACID_STRENGTH:
+        title = f"Checks on {first.sample_name} in {ACID_STRENGTH[first.acid]} acid"
     else:
-        rep += [check_axis(s) for s in series]
-        rep.append(check_order(series))
-    if not quiet:
-        flagged = Report(f for f in rep if f.kind != "ok")
-        ok = len(rep) - len(flagged)
-        acid = f" in {ACID_PCT[series[0].acid]} acid" if series[0].acid in ACID_PCT else ""
-        flagged.show(title or f"Checks on {series[0].sample_name}{acid}: {ok} passed, {len(flagged)} flagged")
-    return rep
+        title = f"Checks on {first.sample_name}"
+    show(flagged, f"{title}: {passed} passed, {len(flagged)} flagged")
+    return feedback
 
 
-def traps_flagged(*reports: Report) -> int:
-    return sum(r.count("trap") for r in reports)
+def traps_flagged(*feedback_lists: list[Feedback]) -> int:
+    """How many trap lines fired across the given check results (counted in the hand-in)."""
+    count = 0
+    for feedback in feedback_lists:
+        count += sum(1 for line in feedback if line.kind == "trap")
+    return count
 
 
 # ---------------------------------------------------------------------------------------------
 # predictions and verdicts
 
 
-def _number(v):
+def _number(value) -> float | None:
+    """A member's answer as a number, or None if it is not one (a word, or ... left in)."""
     try:
-        return float(v)
+        return float(value)
     except (TypeError, ValueError):
         return None
 
@@ -288,39 +308,40 @@ def _number(v):
 LOOK_NEXT = "Now look at the spectra below and find where it really sits."
 
 
-def _count_feedback(label: str, v, k: dict) -> Feedback:
-    """A count that follows from the structure: {"answer", "why"}."""
-    why = k.get("why", "")
-    if v == k["answer"]:
-        return Feedback("agrees", f"{label}: {v}. {why}")
+def _count_feedback(label: str, answer, spec: dict) -> Feedback:
+    """A count that follows from the structure: spec {"answer", "why"}."""
+    why = spec.get("why", "")
+    if answer == spec["answer"]:
+        return Feedback("agrees", f"{label}: {answer}. {why}")
     return Feedback(
         "look again",
-        f"{label}: you said {v}; the structure gives {k['answer']}. {why} Open hint 2 above if this is still unclear.",
+        f"{label}: you said {answer}; the structure gives {spec['answer']}. {why} "
+        "Open hint 2 above if this is still unclear.",
     )
 
 
-def _position_feedback(label: str, v, k: dict) -> Feedback:
-    """A position, judged only against the typical range the notebook teaches: {"typical",
-    "typical_text", "water"}."""
-    x = _number(v)
-    if x is None:
+def _position_feedback(label: str, answer, spec: dict) -> Feedback:
+    """A position, judged only against the typical range the notebook teaches:
+    spec {"typical", "typical_text", "water"}."""
+    position = _number(answer)
+    if position is None:
         return Feedback("to do", f"{label}: write a number in ppm, for example 2.0.")
-    lo, hi = k["typical"]
-    near = k.get("typical_text", f"between {lo} and {hi} ppm")
-    water = k.get("water")
-    if lo <= x <= hi:
-        return Feedback("agrees", f"{label}: {x:g} ppm fits {near}. {LOOK_NEXT}")
-    if water and water[0] <= x <= water[1]:
+    low, high = spec["typical"]
+    near = spec.get("typical_text", f"between {low} and {high} ppm")
+    water = spec.get("water")
+    if low <= position <= high:
+        return Feedback("agrees", f"{label}: {position:g} ppm fits {near}. {LOOK_NEXT}")
+    if water and water[0] <= position <= water[1]:
         return Feedback(
             "look again",
-            f"{label}: {x:g} ppm is closer to where it sits in water. The acid "
+            f"{label}: {position:g} ppm is closer to where it sits in water. The acid "
             "pulls electrons away from the hydrogens, so signals sit higher "
             f"in acid; the table above gives {near}. {LOOK_NEXT}",
         )
-    return Feedback("look again", f"{label}: you said {x:g} ppm; the table above gives {near}. {LOOK_NEXT}")
+    return Feedback("look again", f"{label}: you said {position:g} ppm; the table above gives {near}. {LOOK_NEXT}")
 
 
-def check_prediction(pred: dict, key: dict) -> Report:
+def check_prediction(prediction: dict, key: dict) -> list[Feedback]:
     """Feedback on a prediction made before the member has seen the data.
 
     key: {field: spec}. A spec is one of:
@@ -329,52 +350,54 @@ def check_prediction(pred: dict, key: dict) -> Report:
                                                        range the notebook teaches (never this dataset)
       {"label", "later"}                               a call the member checks later in the notebook
     """
-    rep = Report()
-    for name, k in key.items():
-        v = pred.get(name)
-        label = k.get("label", name)
-        if v is None or v is ... or v == "":
-            rep.append(
+    feedback = []
+    for name, spec in key.items():
+        answer = prediction.get(name)
+        label = spec.get("label", name)
+        if answer is None or answer is ... or answer == "":
+            feedback.append(
                 Feedback("to do", f"{label}: no prediction entered. You can still find it in the spectra below.")
             )
-        elif "later" in k:
-            rep.append(Feedback("open", f"{label}: you said {v!r}. {k['later']}"))
-        elif "answer" in k:
-            rep.append(_count_feedback(label, v, k))
+        elif "later" in spec:
+            feedback.append(Feedback("open", f"{label}: you said {answer!r}. {spec['later']}"))
+        elif "answer" in spec:
+            feedback.append(_count_feedback(label, answer, spec))
         else:
-            rep.append(_position_feedback(label, v, k))
-    return rep
+            feedback.append(_position_feedback(label, answer, spec))
+    return feedback
 
 
-def check_reading(reading: dict, key: dict, prediction: dict | None = None) -> Report:
+def _reading_feedback(label: str, position: float, band: list, predicted) -> Feedback:
+    """One position read off the spectra, against the range it has in this dataset."""
+    low, high = band
+    was = f" You predicted {predicted} ppm." if _number(predicted) is not None else ""
+    if low <= position <= high:
+        return Feedback("agrees", f"{label}: {position:g} ppm. In this data it sits at {low} to {high} ppm.{was}")
+    return Feedback(
+        "look again",
+        f"{label}: {position:g} ppm. Check which peak you read: in this data it sits at {low} to {high} ppm.{was}",
+    )
+
+
+def check_reading(reading: dict, key: dict, prediction: dict | None = None) -> list[Feedback]:
     """Feedback on positions the member read off the spectra (after the plots). Here the ranges
     measured in this dataset are used: key {field: {"label", "band"}}."""
-    rep = Report()
-    for name, k in key.items():
-        if "band" not in k:
+    prediction = prediction or {}
+    feedback = []
+    for name, spec in key.items():
+        if "band" not in spec:
             continue
-        label = k.get("label", name)
-        x = _number(reading.get(name))
-        if x is None:
-            rep.append(
+        label = spec.get("label", name)
+        position = _number(reading.get(name))
+        if position is None:
+            feedback.append(
                 Feedback(
                     "to do", f"{label}: read its position off the plot or peak list above and write it as a number."
                 )
             )
-            continue
-        lo, hi = k["band"]
-        before = (prediction or {}).get(name)
-        was = f" You predicted {before} ppm." if _number(before) is not None else ""
-        if lo <= x <= hi:
-            rep.append(Feedback("agrees", f"{label}: {x:g} ppm. In this data it sits at {lo} to {hi} ppm.{was}"))
         else:
-            rep.append(
-                Feedback(
-                    "look again",
-                    f"{label}: {x:g} ppm. Check which peak you read: in this data it sits at {lo} to {hi} ppm.{was}",
-                )
-            )
-    return rep
+            feedback.append(_reading_feedback(label, position, spec["band"], prediction.get(name)))
+    return feedback
 
 
 FIELD_WORDS = {
@@ -392,48 +415,59 @@ HARSHER = ("98%", "81%", "same", "unsure")
 
 def quoted(words) -> str:
     """'"a", "b" or "c"', for listing the allowed answers."""
-    w = [f'"{x}"' for x in words]
-    return ", ".join(w[:-1]) + " or " + w[-1]
+    in_quotes = [f'"{word}"' for word in words]
+    return ", ".join(in_quotes[:-1]) + " or " + in_quotes[-1]
+
+
+PEAK_LISTS = ("lost_ppm", "new_ppm", "kept_ppm")
+
+
+def _entry_problems(entry: dict, who: str) -> list[str]:
+    """What to fix in one molecule's verdict before the check can read it."""
+    problems = []
+    call = plain_call(entry.get("call", ""))
+    if call and call not in CALLS:
+        problems.append(f'The decision for {who} is "{entry.get("call")}": write one of {quoted(CALLS)}.')
+    confidence = str(entry.get("confidence", "")).strip().lower()
+    if confidence and confidence not in CONFIDENCE:
+        problems.append(f'The confidence for {who} is "{entry.get("confidence")}": write one of {quoted(CONFIDENCE)}.')
+    left = str(entry.get("left", "")).strip().lower()
+    if left and left not in LEFT:
+        problems.append(f'How much is left for {who} is "{entry.get("left")}": write one of {quoted(LEFT)}.')
+    for field in PEAK_LISTS:
+        for ppm in entry.get(field) or []:
+            if not isinstance(ppm, (int, float)):
+                problems.append(
+                    f"The {FIELD_WORDS[field]} for {who} include {ppm!r}: write numbers without quotes, "
+                    "like [2.08, 4.94]."
+                )
+    return problems
 
 
 def verdict_problems(verdict: dict, cases: list[str], names: dict | None = None) -> list[str]:
     """Things to fix before the check can read a verdict (format only, never right or wrong)."""
-    issues = []
+    names = names or {}
+    problems = []
     for case in cases:
-        who = (names or {}).get(case, case)
-        entry = verdict.get(case, {}) or {}
-        call = plain_call(entry.get("call", ""))
-        if call and call not in CALLS:
-            issues.append(f'The decision for {who} is "{entry.get("call")}": write one of {quoted(CALLS)}.')
-        conf = str(entry.get("confidence", "")).strip().lower()
-        if conf and conf not in CONFIDENCE:
-            issues.append(
-                f'The confidence for {who} is "{entry.get("confidence")}": write one of {quoted(CONFIDENCE)}.'
-            )
-        left = str(entry.get("left", "")).strip().lower()
-        if left and left not in LEFT:
-            issues.append(f'How much is left for {who} is "{entry.get("left")}": write one of {quoted(LEFT)}.')
-        issues.extend(
-            f"The {FIELD_WORDS[k]} for {who} include {p!r}: write numbers without quotes, like [2.08, 4.94]."
-            for k in ("lost_ppm", "new_ppm", "kept_ppm")
-            for p in entry.get(k, []) or []
-            if not isinstance(p, (int, float))
-        )
-    return issues
+        problems += _entry_problems(verdict.get(case) or {}, names.get(case, case))
+    return problems
 
 
-def _blank(v) -> bool:
-    return not v.strip() if isinstance(v, str) else not v
+def _blank(value) -> bool:
+    if isinstance(value, str):
+        return not value.strip()
+    return not value
 
 
 def verdict_notes(verdict: dict, cases: list[str], names: dict | None = None) -> list[str]:
     """One friendly line per molecule naming the fields still empty. Empty is allowed; nothing here
     blocks the hand-in."""
+    names = names or {}
     notes = []
     for case in cases:
-        who = (names or {}).get(case, case)
-        entry = verdict.get(case, {}) or {}
-        empty = [FIELD_WORDS[k] for k in FIELD_WORDS if k in entry and _blank(entry[k])]
+        who = names.get(case, case)
+        entry = verdict.get(case) or {}
+        empty = [words for field, words in FIELD_WORDS.items() if field in entry and _blank(entry[field])]
         if empty:
             notes.append(
                 f"{who}: still empty: {', '.join(empty)}. An empty peak list is fine if there were "
@@ -452,14 +486,22 @@ def show_format(verdict: dict, cases: list[str], names: dict | None = None) -> l
     return problems
 
 
-def _dist(s: dict, p: float) -> float:
+def _distance(signal: dict, ppm: float) -> float:
     """Distance to a key signal; a kept signal may sit slightly elsewhere at the last time (ppm_last)."""
-    return min(abs(s["ppm"] - p), abs(s.get("ppm_last", s["ppm"]) - p))
+    last_ppm = signal.get("ppm_last", signal["ppm"])
+    return min(abs(signal["ppm"] - ppm), abs(last_ppm - ppm))
 
 
-def _nearest(signals: list[dict], p: float, tol: float):
-    hits = [s for s in signals if _dist(s, p) <= tol]
-    return min(hits, key=lambda s: _dist(s, p)) if hits else None
+def _nearest(signals: list[dict], ppm: float, tolerance_ppm: float) -> dict | None:
+    """The key signal closest to ppm, if one is within tolerance_ppm."""
+    nearest = None
+    for signal in signals:
+        distance = _distance(signal, ppm)
+        if distance > tolerance_ppm:
+            continue
+        if nearest is None or distance < _distance(nearest, ppm):
+            nearest = signal
+    return nearest
 
 
 def _call_feedback(call: str, expected: str | None, case: dict) -> Feedback:
@@ -469,16 +511,19 @@ def _call_feedback(call: str, expected: str | None, case: dict) -> Feedback:
     if not call:
         return Feedback("to do", f"No decision yet: write one of {quoted(CALLS)}.")
     if call == "unsure":
-        settle = f" What settles it: {case['why']}." if case.get("why") else ""
-        return Feedback(
-            "open",
-            "You answered unsure, which is a fair answer on this data." + settle + ("" if expected else " " + check),
-        )
+        text = "You answered unsure, which is a fair answer on this data."
+        if case.get("why"):
+            text += f" What settles it: {case['why']}."
+        if not expected:
+            text += " " + check
+        return Feedback("open", text)
     if expected is None:
         return Feedback("open", f"You decided '{call}'. {check} Your hand-in goes to review as you wrote it.")
     if call == expected:
         return Feedback("agrees", f"This matches {source}: '{expected}'.")
-    why = f": {case['why']}" if case.get("why") else ""
+    why = ""
+    if case.get("why"):
+        why = f": {case['why']}"
     return Feedback(
         "look again",
         f"This differs from {source} ('{expected}'){why}. Go back over the "
@@ -487,34 +532,43 @@ def _call_feedback(call: str, expected: str | None, case: dict) -> Feedback:
     )
 
 
-def _cited_feedback(p: float, group: str, signals: list[dict], tol: float, sample: str) -> Feedback | None:
+def _against_key_signal(ppm: float, group: str, hit: dict) -> Feedback:
+    """A cited peak that sits on one of the key's signals: the same group, or another one."""
+    if hit["group"] == group:
+        return Feedback("agrees", f"{ppm:.2f} ({group}): {hit['what']}.")
+    default = f"in the data this one is {hit['group']} ({hit['what']})."
+    why = hit.get("if_listed_as", {}).get(group, default)
+    return Feedback("look again", f"{ppm:.2f} (you said {group}): {why}")
+
+
+def _cited_feedback(
+    ppm: float, group: str, signals: list[dict], *, tolerance_ppm: float, sample: str
+) -> Feedback | None:
     """One peak the member cited as lost, new or kept, against the key's signals."""
-    hit = _nearest(signals, p, tol)
-    if ACID_ZONE[0] <= p <= ACID_ZONE[1]:
-        return Feedback("look again", f"{p:.2f} ({group}): that is the acid's own signal, not the sample's.")
-    if hit and hit["group"] == group:
-        return Feedback("agrees", f"{p:.2f} ({group}): {hit['what']}.")
+    if ACID_ZONE[0] <= ppm <= ACID_ZONE[1]:
+        return Feedback("look again", f"{ppm:.2f} ({group}): that is the acid's own signal, not the sample's.")
+    hit = _nearest(signals, ppm, tolerance_ppm)
     if hit:
-        why = hit.get("if_listed_as", {}).get(group, f"in the data this one is {hit['group']} ({hit['what']}).")
-        return Feedback("look again", f"{p:.2f} (you said {group}): {why}")
-    if group == "lost" and EXCHANGEABLE[0] <= p <= EXCHANGEABLE[1] and sample not in AROMATIC:
+        return _against_key_signal(ppm, group, hit)
+    if group == "lost" and EXCHANGEABLE[0] <= ppm <= EXCHANGEABLE[1] and sample not in AROMATIC:
         return Feedback(
             "note",
-            f"{p:.2f} (lost): hydrogens on nitrogen or oxygen swap with the acid's "
+            f"{ppm:.2f} (lost): hydrogens on nitrogen or oxygen swap with the acid's "
             "deuterium, so their signals often fade or do not show. A missing NH peak "
             "is not evidence of breakdown.",
         )
-    mirrored = _nearest(signals, _mirror(p), tol)
+    mirrored = _nearest(signals, _mirror(ppm), tolerance_ppm)
     if mirrored:
         return Feedback(
             "look again",
-            f"{p:.2f}: nothing here, but its mirror image {_mirror(p):.2f} is {mirrored['what']}. "
+            f"{ppm:.2f}: nothing here, but its mirror image {_mirror(ppm):.2f} is {mirrored['what']}. "
             "Is your ppm axis reversed?",
         )
     if signals:
         return Feedback(
             "note",
-            f"{p:.2f} ({group}): no signal in the key within {tol} ppm. It may be a minor peak, or a misread value.",
+            f"{ppm:.2f} ({group}): no signal in the key within {tolerance_ppm} ppm. "
+            "It may be a minor peak, or a misread value.",
         )
     return None
 
@@ -524,9 +578,9 @@ def _product_feedback(guess: str, expected: str | None, case: dict) -> Feedback 
     if "product_words" in case:
         if not guess:
             return Feedback("to do", "No product guess yet.")
-        if any(w in guess for w in case["product_words"]):
+        if any(word in guess for word in case["product_words"]):
             return Feedback("agrees", f"Product: {case['product']}.")
-        if any(w in guess for w in case.get("close_words", [])):
+        if any(word in guess for word in case.get("close_words", [])):
             return Feedback("note", case.get("close_message", f"Close. The published product is {case['product']}."))
         return Feedback(
             "look again",
@@ -537,111 +591,97 @@ def _product_feedback(guess: str, expected: str | None, case: dict) -> Feedback 
     return None
 
 
-def _confidence_feedback(conf: str, call: str, expected: str | None) -> Feedback | None:
+def _confidence_feedback(confidence: str, call: str, expected: str | None) -> Feedback | None:
     """A nudge when the confidence does not fit how the decision compares with the published one."""
-    if not (expected and call and call != "unsure"):
+    if not expected or not call or call == "unsure":
         return None
-    if conf == "high" and call != expected:
+    if confidence == "high" and call != expected:
         return Feedback(
             "note",
             "You gave high confidence to a decision that differs from the published one. Check your evidence again.",
         )
-    if conf == "low" and call == expected:
+    if confidence == "low" and call == expected:
         return Feedback(
             "note", "Your decision matches the published one, so the evidence supports more than low confidence."
         )
     return None
 
 
-def check_verdict(entry: dict, case: dict, tol: float | None = None, sample: str | None = None) -> Report:
+def _cited_ppm(entry: dict) -> dict[str, list[float]]:
+    """The peaks the member cited, by group ("lost", "new", "kept"). Typed words are left out:
+    write_down has already asked for numbers."""
+    cited = {}
+    for group in ("lost", "new", "kept"):
+        cited[group] = []
+        for ppm in entry.get(f"{group}_ppm") or []:
+            if isinstance(ppm, (int, float)):
+                cited[group].append(ppm)
+    return cited
+
+
+def check_verdict(entry: dict, case: dict) -> list[Feedback]:
     """Feedback on one verdict ({"call", "lost_ppm", "new_ppm", "kept_ppm", "product_guess", "confidence"})
     against one answer-key case. A case with no published call points to the paper's tables.
     'unsure' is always a fair answer."""
-    tol = tol if tol is not None else case.get("tolerance_ppm", 0.05)
-    sample = sample or case.get("sample", "")
+    tolerance_ppm = case.get("tolerance_ppm", _peaks.SAME_PEAK_PPM)
+    sample = case.get("sample", "")
     entry = entry or {}
     call = plain_call(entry.get("call", ""))
     expected = plain_call(case.get("call")) or None
-    rep = Report([_call_feedback(call, expected, case)])
+    feedback = [_call_feedback(call, expected, case)]
 
     signals = case.get("signals", [])
-    cited = {
-        g: [p for p in (entry.get(f"{g}_ppm") or []) if isinstance(p, (int, float))] for g in ("lost", "new", "kept")
-    }
-    for group, values in cited.items():
-        rep += [fb for p in values if (fb := _cited_feedback(p, group, signals, tol, sample))]
-    for s in signals:
-        if not s.get("optional") and not any(_dist(s, p) <= tol for p in cited.get(s["group"], [])):
-            rep.append(Feedback("tip", f"You could also cite {s['ppm']:.2f} as {s['group']}: {s['what']}."))
+    cited = _cited_ppm(entry)
+    for group, positions in cited.items():
+        for ppm in positions:
+            line = _cited_feedback(ppm, group, signals, tolerance_ppm=tolerance_ppm, sample=sample)
+            if line is not None:
+                feedback.append(line)
+    for signal in signals:
+        if signal.get("optional"):
+            continue
+        if not any(_distance(signal, ppm) <= tolerance_ppm for ppm in cited.get(signal["group"], [])):
+            feedback.append(
+                Feedback("tip", f"You could also cite {signal['ppm']:.2f} as {signal['group']}: {signal['what']}.")
+            )
 
     guess = str(entry.get("product_guess", "")).strip().lower()
-    conf = str(entry.get("confidence", "")).strip().lower()
-    rep += [fb for fb in (_product_feedback(guess, expected, case), _confidence_feedback(conf, call, expected)) if fb]
-    return rep
+    confidence = str(entry.get("confidence", "")).strip().lower()
+    for line in (_product_feedback(guess, expected, case), _confidence_feedback(confidence, call, expected)):
+        if line is not None:
+            feedback.append(line)
+    return feedback
 
 
-def check_peak_list(mine: dict, case: dict, tol: float | None = None, labels: dict | None = None) -> Report:
-    """Do the member's peak lists ({time: [ppm...]}) contain the signals that matter (and lack the gone ones)?"""
-    tol = tol if tol is not None else case.get("tolerance_ppm", 0.05)
-    rep = Report()
-    for t, exp in case.get("expect", {}).items():
-        have = _peaks.ppms(mine.get(t, []))
-        where = (labels or {}).get(t, time_label(t))
-        missed = _peaks.match(have, exp.get("present", []), tol)["missing"]
-        wrongly = _peaks.match(have, exp.get("absent", []), tol)["found"]
-        if not missed and not wrongly:
-            rep.append(
-                Feedback("agrees", f"{where}: all {len(exp.get('present', []))} expected signals are in your list.")
-            )
-        for p in missed:
-            if any(abs(_mirror(p) - q) <= tol for q in have):
-                rep.append(
-                    Feedback(
-                        "look again",
-                        f"{where}: no peak near {p:.2f} but one near {_mirror(p):.2f}, its "
-                        "mirror image: is the axis reversed?",
-                    )
-                )
-            else:
-                rep.append(
-                    Feedback("look again", f"{where}: no peak near {p:.2f}. If it is small, try a lower MIN_HEIGHT.")
-                )
-        for p in wrongly:
-            rep.append(
-                Feedback(
-                    "look again",
-                    f"{where}: a peak near {p:.2f} should be gone by now. Check which spectrum this list came from.",
-                )
-            )
-    return rep
+SIMILAR = 0.95  # a correlation of two traces at or above this counts as the same shape
+SAME_LINE_PPM = 0.01  # well under the 0.016 ppm between the two lines of one methyl peak
 
 
-def similarity_feedback(r: float, threshold: float = 0.95) -> Feedback:
-    """r: the correlation of two traces between 1 and 6.5 ppm (1 means the same shape)."""
-    if r >= threshold:
+def similarity_feedback(correlation: float) -> Feedback:
+    """correlation: of two traces between 1 and 6.5 ppm (1 means the same shape)."""
+    if correlation >= SIMILAR:
         return Feedback(
             "agrees",
-            f"Similarity {r:.3f}, at or above {threshold}: the two traces have the same "
+            f"Similarity {correlation:.3f}, at or above {SIMILAR}: the two traces have the same "
             "shape, so your processing matches the instrument's.",
         )
     return Feedback(
         "look again",
-        f"Similarity {r:.3f}, below {threshold}: the two traces differ in shape. Check "
+        f"Similarity {correlation:.3f}, below {SIMILAR}: the two traces differ in shape. Check "
         "the phase and the axis direction.",
     )
 
 
-def line_feedback(diff: dict, label: str = "") -> Feedback:
-    """The largest difference in position between matching lines (from peaks.line_differences)."""
-    lead = f"{label}: " if label else ""
-    if diff.get("largest_ppm") is None:
-        return Feedback("look again", f"{lead}No lines found between 1 and 6.5 ppm to compare. Check the axis.")
-    d, at = diff["largest_ppm"], diff["at_ppm"]
+def line_feedback(differences: dict) -> Feedback:
+    """The largest difference in position between matching lines: {"largest_ppm", "at_ppm", "lines"}."""
+    if differences.get("largest_ppm") is None:
+        return Feedback("look again", "No lines found between 1 and 6.5 ppm to compare. Check the axis.")
+    largest, at = differences["largest_ppm"], differences["at_ppm"]
     text = (
-        f"{lead}The largest difference between matching lines is {d:.4f} ppm, at the line near {at:.3f} ppm "
-        f"({diff['lines']} lines compared)."
+        f"The largest difference between matching lines is {largest:.4f} ppm, at the line near {at:.3f} ppm "
+        f"({differences['lines']} lines compared)."
     )
-    if d <= 0.01:
+    if largest <= SAME_LINE_PPM:
         return Feedback("agrees", text + " Every line sits within 0.01 ppm of the instrument's.")
     return Feedback(
         "look again",
@@ -650,27 +690,39 @@ def line_feedback(diff: dict, label: str = "") -> Feedback:
     )
 
 
-def check_backbone(ppm, case: dict | None = None, tol: float | None = None) -> Feedback:
+def check_backbone(ppm, case: dict | None = None) -> Feedback:
     """The member's backbone signal (the alpha hydrogen). Compared only when the case names one;
     otherwise it is saved for the reviewer."""
     case = case or {}
-    tol = tol if tol is not None else case.get("tolerance_ppm", 0.05)
+    tolerance_ppm = case.get("tolerance_ppm", _peaks.SAME_PEAK_PPM)
     if ppm is ... or ppm is None:
         return Feedback("to do", "No backbone signal chosen yet.")
-    bb = [s for s in case.get("signals", []) if s.get("backbone")]
-    if not bb:
+    ppm = float(ppm)
+    backbone = [signal for signal in case.get("signals", []) if signal.get("backbone")]
+    if not backbone:
         return Feedback(
             "open",
-            f"Saved: {float(ppm):.2f} ppm as your backbone signal. It goes in your hand-in, and "
+            f"Saved: {ppm:.2f} ppm as your backbone signal. It goes in your hand-in, and "
             "your reviewer goes over it with you.",
         )
-    if any(abs(s["ppm"] - float(ppm)) <= tol for s in bb):
-        return Feedback("agrees", f"{float(ppm):.2f} ppm: {bb[0]['what']}.")
-    hit = _nearest(case.get("signals", []), float(ppm), tol)
+    if any(abs(signal["ppm"] - ppm) <= tolerance_ppm for signal in backbone):
+        return Feedback("agrees", f"{ppm:.2f} ppm: {backbone[0]['what']}.")
+    hit = _nearest(case.get("signals", []), ppm, tolerance_ppm)
     if hit:
         return Feedback(
             "look again",
-            f"{float(ppm):.2f} ppm is {hit['what']}. The backbone signal is the alpha "
+            f"{ppm:.2f} ppm is {hit['what']}. The backbone signal is the alpha "
             "hydrogen: the hydrogen on the carbon next to the nitrogen.",
         )
-    return Feedback("look again", f"No signal near {float(ppm):.2f} ppm in the key. Pick a peak from your list.")
+    return Feedback("look again", f"No signal near {ppm:.2f} ppm in the key. Pick a peak from your list.")
+
+
+def matches_published(entry: dict, case: dict) -> str:
+    """For the shared results table: "yes" or "no" against the published call, or "unsure" when
+    there is no published call or the member answered unsure (or nothing)."""
+    call = plain_call(entry.get("call"))
+    if not case.get("call") or call in ("", "unsure"):
+        return "unsure"
+    if call == plain_call(case["call"]):
+        return "yes"
+    return "no"

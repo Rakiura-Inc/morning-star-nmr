@@ -1,0 +1,45 @@
+code,name,kind,source
+AA,Ala-Ala,homodipeptide,zenodo 11223995 file names
+CC,Cys-Cys,homodipeptide,zenodo 11223995 file names
+DD,Asp-Asp,homodipeptide,zenodo 11223995 file names
+EE,Glu-Glu,homodipeptide,zenodo 11223995 file names
+FF,Phe-Phe,homodipeptide,zenodo 11223995 file names
+GG,Gly-Gly,homodipeptide,zenodo 11223995 file names
+HH,His-His,homodipeptide,zenodo 11223995 file names
+II,Ile-Ile,homodipeptide,zenodo 11223995 file names
+KK,Lys-Lys,homodipeptide,zenodo 11223995 file names
+LL,Leu-Leu,homodipeptide,zenodo 11223995 file names
+MM,Met-Met,homodipeptide,zenodo 11223995 file names
+NN,Asn-Asn,homodipeptide,zenodo 11223995 file names
+PP,Pro-Pro,homodipeptide,zenodo 11223995 file names
+QQ,Gln-Gln,homodipeptide,zenodo 11223995 file names
+RR,Arg-Arg,homodipeptide,zenodo 11223995 file names
+SS,Ser-Ser,homodipeptide,zenodo 11223995 file names
+TT,Thr-Thr,homodipeptide,zenodo 11223995 file names
+VV,Val-Val,homodipeptide,zenodo 11223995 file names
+WW,Trp-Trp,homodipeptide,zenodo 11223995 file names
+YY,Tyr-Tyr,homodipeptide,zenodo 11223995 file names
+ALA,alanine,amino acid,zenodo 8381013 file names
+ARG,arginine,amino acid,zenodo 8381013 file names
+ASN,asparagine,amino acid,zenodo 8381013 file names
+ASP,aspartic acid,amino acid,zenodo 8381013 file names
+CYS,cysteine,amino acid,zenodo 8381013 file names
+GLN,glutamine,amino acid,zenodo 8381013 file names
+GLU,glutamic acid,amino acid,zenodo 8381013 file names
+GLY,glycine,amino acid,zenodo 8381013 file names
+HIS,histidine,amino acid,zenodo 8381013 file names
+ILE,isoleucine,amino acid,zenodo 8381013 file names
+LEU,leucine,amino acid,zenodo 8381013 file names
+LYS,lysine,amino acid,zenodo 8381013 file names
+MET,methionine,amino acid,zenodo 8381013 file names
+PHE,phenylalanine,amino acid,zenodo 8381013 file names
+PRO,proline,amino acid,zenodo 8381013 file names
+SER,serine,amino acid,zenodo 8381013 file names
+THR,threonine,amino acid,zenodo 8381013 file names
+TRP,tryptophan,amino acid,zenodo 8381013 file names
+TYR,tyrosine,amino acid,zenodo 8381013 file names
+VAL,valine,amino acid,zenodo 8381013 file names
+OSulfLSer,O-sulfoserine,reference compound,zenodo 8381013 file names
+LAlaninamide,L-alaninamide,reference compound,zenodo 11122291 file names
+LGlycinamide,L-glycinamide,reference compound,zenodo 11122291 file names
+AA+A,Ala-Ala + alanine,mixture,zenodo 11122291 file names

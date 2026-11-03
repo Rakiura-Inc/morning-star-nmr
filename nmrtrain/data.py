@@ -33,12 +33,13 @@ import urllib.parse
 import urllib.request
 import zipfile
 import zlib
-from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from collections.abc import Iterable
+from functools import partial
 from importlib import resources
 from pathlib import Path
 
 from . import __version__
+from .names import acid_code, sample_code
 
 USER_AGENT = f"nmrtrain/{__version__} (training notebooks; polite range reads)"
 MIN_INTERVAL_S = float(os.environ.get("NMRTRAIN_MIN_INTERVAL", "0.5"))
@@ -101,17 +102,16 @@ def data_dir() -> str:
 # polite HTTP
 
 
-class _RateLimit:
-    """Keeps requests at least MIN_INTERVAL_S apart."""
+_last_request_at = 0.0  # time.monotonic() of the last request, for the rate limit
 
-    last = 0.0
 
-    @classmethod
-    def wait_turn(cls) -> None:
-        gap = time.monotonic() - cls.last
-        if gap < MIN_INTERVAL_S:
-            time.sleep(MIN_INTERVAL_S - gap)
-        cls.last = time.monotonic()
+def _wait_turn() -> None:
+    """Sleep until at least MIN_INTERVAL_S has passed since the last request."""
+    global _last_request_at
+    gap = time.monotonic() - _last_request_at
+    if gap < MIN_INTERVAL_S:
+        time.sleep(MIN_INTERVAL_S - gap)
+    _last_request_at = time.monotonic()
 
 
 def _get(url: str, start: int | None = None, end: int | None = None, timeout: float = 120):
@@ -122,9 +122,10 @@ def _get(url: str, start: int | None = None, end: int | None = None, timeout: fl
         headers["Range"] = f"bytes={start}-{end}"
     delay = FIRST_RETRY_DELAY_S
     for attempt in range(1, MAX_TRIES + 1):
-        _RateLimit.wait_turn()
+        _wait_turn()
         try:
-            return urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=timeout)  # noqa: S310 (Zenodo, GitHub or the mirror a maintainer set)
+            request = urllib.request.Request(url, headers=headers)  # noqa: S310 (Zenodo, GitHub or the mirror a maintainer set)
+            return urllib.request.urlopen(request, timeout=timeout)  # noqa: S310 (as above)
         except urllib.error.HTTPError as exc:
             if exc.code not in RETRY_STATUS or attempt == MAX_TRIES:
                 raise
@@ -145,7 +146,7 @@ def _read_body(response, need_partial: bool) -> bytes:
 
 
 def _get_bytes(
-    url: str, start: int | None = None, end: int | None = None, timeout: float = 120, need_partial: bool = False
+    url: str, start: int | None = None, end: int | None = None, timeout: float = 120, *, need_partial: bool = False
 ) -> bytes:
     """Read a whole response (or byte range), retrying a dropped connection with backoff."""
     delay = FIRST_RETRY_DELAY_S
@@ -183,7 +184,12 @@ class HttpRangeFile(io.RawIOBase):
         return self.pos
 
     def seek(self, offset, whence=io.SEEK_SET):
-        self.pos = {io.SEEK_SET: offset, io.SEEK_CUR: self.pos + offset, io.SEEK_END: self.size + offset}[whence]
+        if whence == io.SEEK_SET:
+            self.pos = offset
+        elif whence == io.SEEK_CUR:
+            self.pos += offset
+        else:  # io.SEEK_END
+            self.pos = self.size + offset
         return self.pos
 
     def readinto(self, buf):
@@ -214,13 +220,13 @@ def _norm_record(record: str) -> str:
     return str(record).replace("10.5281/zenodo.", "").replace("zenodo.", "").strip()
 
 
-def _wanted(m: dict, sample: str, acid: str | None, nucleus: str, repeats: bool) -> bool:
-    return (
-        m["sample"] == sample
-        and m["nucleus"] == nucleus
-        and (acid is None or m["acid"] == acid)
-        and (repeats or not m["repeat"])
-    )
+def _wanted(member: dict, sample: str, acid: str | None, nucleus: str, *, repeats: bool) -> bool:
+    """Is this manifest entry one of the sample's spectra (in that acid, for that nucleus)?"""
+    if member["sample"] != sample or member["nucleus"] != nucleus:
+        return False
+    if acid is not None and member["acid"] != acid:
+        return False
+    return repeats or not member["repeat"]
 
 
 def _last_run_per_time_point(rows: list[dict]) -> list[dict]:
@@ -236,6 +242,7 @@ def select(
     sample: str,
     acid: str | None = None,
     nucleus: str = "1H",
+    *,
     times: str | Iterable[str] = "all",
     repeats: bool = False,
 ) -> list[dict]:
@@ -243,7 +250,7 @@ def select(
     record = _norm_record(record)
     members = manifest(record)["members"]
     order = RECORDS[record]["time_order"]
-    rows = [m for m in members if _wanted(m, sample, acid, nucleus, repeats)]
+    rows = [m for m in members if _wanted(m, sample, acid, nucleus, repeats=repeats)]
     if times != "all":
         wanted = [times] if isinstance(times, str) else list(times)
         rows = [m for m in rows if m["time_group"] in wanted or m["time"] in wanted]
@@ -277,8 +284,10 @@ def _crc_ok(path: str | Path, member: dict) -> bool:
         return False
     crc = 0
     with path.open("rb") as fh:
-        for chunk in iter(lambda: fh.read(CHUNK), b""):
+        chunk = fh.read(CHUNK)
+        while chunk:
             crc = _crc32(chunk, crc)
+            chunk = fh.read(CHUNK)
     return crc == member["crc"]
 
 
@@ -309,9 +318,14 @@ def _hosted_url(folder: str, name: str) -> str:
     return f"https://raw.githubusercontent.com/{REPO}/{REPO_REF}/data/{folder}/{urllib.parse.quote(name)}"
 
 
+def _matches(data: bytes, member: dict) -> bool:
+    """True when the bytes have the member's size and CRC."""
+    return len(data) == member["size"] and _crc32(data) == member["crc"]
+
+
 def _write_verified(data: bytes, dest: str, member: dict) -> bool:
     """Write data to dest only when it has the member's size and CRC."""
-    if len(data) != member["size"] or _crc32(data) != member["crc"]:
+    if not _matches(data, member):
         return False
     part = Path(dest + ".part")
     part.write_bytes(data)
@@ -370,45 +384,52 @@ def _read_from_archive(archive: str, member: dict) -> bytes:
         return z.read(member["path"])
 
 
-@dataclass(frozen=True)
-class _Download:
-    """One network source for a spectrum, tried in turn by `fetch_member`."""
+def _try_download(read, member: dict, problems: list[str], mismatch: str | None = None) -> bytes | None:
+    """read() once: its bytes if they pass the CRC check, else None, with what went wrong noted."""
+    try:
+        data = read()
+    except (*_NET_ERRORS, zipfile.BadZipFile, KeyError) as exc:
+        problems.append(str(exc))
+        return None
+    if _matches(data, member):
+        return data
+    if mismatch:
+        problems.append(mismatch)
+    return None
 
-    read: Callable[[], bytes]
-    got: str | None = None  # printed on success
-    mismatch: str | None = None  # recorded when the bytes fail the CRC check
-    errors: tuple[type[BaseException], ...] = _NET_ERRORS  # recorded and skipped
 
-
-def _downloads(record: str, member: dict, hosted: str | None) -> list[_Download]:
-    """The network sources for one spectrum, in the order they are tried."""
-    name, mb = member["name"], member["size"] / 1e6
-    sources = []
+def _download(record: str, member: dict, hosted: str | None, quiet: bool) -> tuple[bytes | None, list[str]]:
+    """Try the network sources for one spectrum in turn: this repository on GitHub (hosted spectra
+    only), Zenodo (one range request), the mirror (when $NMRTRAIN_MIRROR is set), then the whole
+    archive. Returns the first bytes that pass the CRC check (None if none did) and what went wrong."""
+    name, megabytes = member["name"], member["size"] / 1e6
+    problems = []
     if hosted:
-        sources.append(
-            _Download(
-                read=lambda: _get_bytes(_hosted_url(hosted, name)),
-                got=f"  got {name} ({mb:.1f} MB) from {REPO}",
-                mismatch=f"checksum mismatch on the copy in {REPO}",
-            )
+        data = _try_download(
+            partial(_get_bytes, _hosted_url(hosted, name)), member, problems, f"checksum mismatch on the copy in {REPO}"
         )
-    sources.append(
-        _Download(
-            read=lambda: _range_get(record, member),
-            got=f"  got {name} ({mb:.1f} MB)",
-            mismatch="checksum mismatch on the range read",
-        )
-    )
+        if data is not None:
+            if not quiet:
+                print(f"  got {name} ({megabytes:.1f} MB) from {REPO}")
+            return data, problems
+    data = _try_download(partial(_range_get, record, member), member, problems, "checksum mismatch on the range read")
+    if data is not None:
+        if not quiet:
+            print(f"  got {name} ({megabytes:.1f} MB)")
+        return data, problems
     mirror = os.environ.get("NMRTRAIN_MIRROR")
     if mirror:
-        sources.append(_Download(read=lambda: _get_bytes(mirror.rstrip("/") + "/" + urllib.parse.quote(name))))
-    sources.append(
-        _Download(
-            read=lambda: _read_from_archive(_whole_archive(record), member),
-            errors=(*_NET_ERRORS, zipfile.BadZipFile, KeyError),
-        )
-    )
-    return sources
+        mirror_url = mirror.rstrip("/") + "/" + urllib.parse.quote(name)
+        data = _try_download(partial(_get_bytes, mirror_url), member, problems)
+        if data is not None:
+            return data, problems
+    whole_archive_member = partial(_read_from_archive_of, record, member)
+    return _try_download(whole_archive_member, member, problems), problems
+
+
+def _read_from_archive_of(record: str, member: dict) -> bytes:
+    """The member's bytes from the whole archive, downloaded once into the cache."""
+    return _read_from_archive(_whole_archive(record), member)
 
 
 def _from_local_copies(record: str, member: dict, dest: str, hosted: str | None) -> bool:
@@ -430,48 +451,59 @@ def fetch_member(record: str, member: dict, quiet: bool = False) -> str:
     hosted = _hosted_folder(record, member)
     if _crc_ok(dest, member) or _from_local_copies(record, member, dest, hosted):
         return dest
-    errors = []
-    for source in _downloads(record, member, hosted):
-        try:
-            if _write_verified(source.read(), dest, member):
-                if source.got and not quiet:
-                    print(source.got)
-                return dest
-            if source.mismatch:
-                errors.append(source.mismatch)
-        except source.errors as exc:
-            errors.append(str(exc))
-    msg = (
-        f"Could not get {member['name']} ({'; '.join(errors)}). If you are offline, try again "
-        f"later, or download https://doi.org/{RECORDS[record]['doi']} and point NMRTRAIN_LOCAL at it."
-    )
-    raise OSError(msg)
+    data, problems = _download(record, member, hosted, quiet)
+    if data is None:
+        msg = (
+            f"Could not get {member['name']} ({'; '.join(problems)}). If you are offline, try again "
+            f"later, or download https://doi.org/{RECORDS[record]['doi']} and point NMRTRAIN_LOCAL at it."
+        )
+        raise OSError(msg)
+    _write_verified(data, dest, member)
+    return dest
 
 
 def fetch(
     record: str,
     sample: str,
-    acid: str | None = "K",
+    acid: str | None = "98%",
     nucleus: str = "1H",
+    *,
     times: str | Iterable[str] = "all",
     quiet: bool = False,
 ) -> list[str]:
     """Download (or find) the spectra for one sample and return their paths, first time point first.
 
     record: "11223995" (dipeptides), "8381013" (amino acids) or "11122291" (mechanism); a DOI works too.
-    acid: "K" (98% w/w) or "H" (81% w/w); None for both.
+    sample: the name the steps use ("glycine", "Ala-Ala") or the dataset's code ("GLY", "AA").
+    acid: "98%" or "81%" (w/w; the codes "K" and "H" work too); None for both.
+    times: "all", or the time labels to keep, such as ["1day", "4Month"].
     """
     record = _norm_record(record)
-    rows = select(record, sample, acid, nucleus, times)
+    sample, acid = sample_code(sample), acid_code(acid)
+    rows = select(record, sample, acid, nucleus, times=times)
     need = [m for m in rows if not _crc_ok(Path(data_dir(), record, m["name"]), m)]
     if not quiet:
-        mb = sum(m["size"] for m in need) / 1e6
-        what = f"{len(rows)} spectra" + (f", downloading {len(need)} ({mb:.1f} MB)" if need else ", all cached")
-        print(f"{sample} {nucleus} {ACIDS.get(acid, 'both acids') if acid else 'both acids'}: {what}")
+        _say_what_is_needed(sample, acid, nucleus, rows=rows, need=need)
     paths = [fetch_member(record, m, quiet=quiet) for m in rows]
     if not quiet:
         print(citation(record))
     return paths
+
+
+def _say_what_is_needed(sample: str, acid: str | None, nucleus: str, *, rows: list[dict], need: list[dict]) -> None:
+    """One line: how many spectra, and how many must be downloaded."""
+    acid_words = ACIDS.get(acid, "both acids")
+    if need:
+        megabytes = sum(m["size"] for m in need) / 1e6
+        what = f"{len(rows)} spectra, downloading {len(need)} ({megabytes:.1f} MB)"
+    else:
+        what = f"{len(rows)} spectra, all cached"
+    print(f"{sample} {nucleus} {acid_words}: {what}")
+
+
+def time_of(path: str) -> str:
+    """The time label of a downloaded spectrum, from its manifest entry: "1day", "4Month"..."""
+    return member_for(path)["time_group"]
 
 
 def member_for(path: str) -> dict | None:

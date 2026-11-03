@@ -27,7 +27,7 @@ def test_offline_mode_logs_and_saves_files(tmp_path, capsys):
     assert nt.portal.connect("notebooks/01_capstone_ala_ala_vs_gly_gly.ipynb") == "offline"
     nt.record.predict("q", {"a": 1})
     assert nt.record.revealed("q")
-    rec = nt.record.handin(
+    nt.record.handin(
         "capstone-verdict",
         figures={"stack": _fig()},
         verdict={"AA": {"call": "unsure"}},
@@ -41,14 +41,15 @@ def test_offline_mode_logs_and_saves_files(tmp_path, capsys):
     assert saved["predicted_before_reveal"] is True and saved["traps_flagged"] == 2
     log = json.loads(Path(nt.portal.state.handin_dir, "rakiura_progress.json").read_text())
     assert log[0]["part"] == "capstone-verdict" and log[0]["numbers"]["AA_call"] == "unsure"
-    assert rec["ppm_scale"].startswith("instrument")
+    assert saved["ppm_scale"].startswith("instrument")
     assert nt.portal.submit() is False  # offline mode never sends anything
 
 
 def test_offline_ticks_print_plain_words_not_part_names(capsys):
     nt.portal.connect("notebooks/01_capstone_ala_ala_vs_gly_gly.ipynb")
     capsys.readouterr()
-    assert nt.portal.done("capstone-predict")
+    nt.portal.done("capstone-predict")
+    assert nt.portal.state.last_part == "capstone-predict"
     out = capsys.readouterr().out
     assert out.strip() == "Prediction saved (offline mode: kept on this computer)."
     log = json.loads(Path(nt.portal.state.handin_dir, "rakiura_progress.json").read_text())
@@ -58,15 +59,20 @@ def test_offline_ticks_print_plain_words_not_part_names(capsys):
 def test_reveal_refuses_before_a_prediction(capsys):
     nt.record.predict("blank", {"a": ...})
     assert nt.record.revealed("blank") is False
-    assert "prediction in the cell above first" in capsys.readouterr().out
+    assert "Make your prediction first" in capsys.readouterr().out
 
 
 def test_part_names_and_numbers_are_validated(capsys):
     nt.portal.connect("nb.ipynb")
-    assert nt.portal.done("bad part!") is False
-    assert nt.portal.done("ok", numbers={"x": [1, 2]}) is False
-    assert nt.portal.done("ok", numbers={f"n{i}": i for i in range(21)}) is False
-    assert nt.portal.done("ok", figures=[plt.figure()]) is False
+    capsys.readouterr()
+    nt.portal.done("bad part!")
+    assert "a part name is letters" in capsys.readouterr().out
+    nt.portal.done("ok", numbers={"x": [1, 2]})
+    assert "never a table" in capsys.readouterr().out
+    nt.portal.done("ok", numbers={f"n{i}": i for i in range(21)})
+    assert "never a table" in capsys.readouterr().out
+    nt.portal.done("ok", figures=[plt.figure()])
+    assert "that figure is empty" in capsys.readouterr().out
 
 
 def test_fill_keeps_the_notebook_running(capsys):
@@ -311,3 +317,31 @@ def test_without_a_key_the_helper_is_not_asked_to_sign_in(monkeypatch, capsys):
     monkeypatch.setenv("RAKIURA_CREDENTIALS", "/nonexistent/creds")
     assert nt.portal.connect("nb.ipynb") == "offline"
     assert "Run the Connect cell below" in capsys.readouterr().out
+
+
+def test_steps_per_part_and_the_older_per_notebook_format(tmp_path, monkeypatch):
+    shipped = json.loads((ROOT / "notebooks" / "rakiura_steps.json").read_text())["notebooks"]
+    for name, entry in shipped.items():
+        for part, part_entry in entry["parts"].items():
+            assert part_entry["step"].startswith(("ONB-102-D", "RES-102-D")), (name, part)
+    steps = tmp_path / "steps.json"
+    monkeypatch.setenv("NMRTRAIN_STEPS", str(steps))
+    monkeypatch.delenv("RAKIURA_STEP", raising=False)
+    nb = "notebooks/01_capstone_ala_ala_vs_gly_gly.ipynb"
+    steps.write_text(json.dumps({"notebooks": {Path(nb).name: shipped[Path(nb).name]}}))
+    assert nt.portal.steps(nb, "capstone-predict")["step"] == "ONB-102-D5"
+    assert nt.portal.steps(nb, "glygly-reading")["step"] == "RES-102-D9"
+    older = {"step": "ONB-102-D7", "parts": {"capstone-verdict": "verdict handed in"}}
+    steps.write_text(json.dumps({"notebooks": {Path(nb).name: older}}))
+    assert nt.portal.steps(nb, "capstone-verdict")["step"] == "ONB-102-D7"
+    monkeypatch.setenv("RAKIURA_STEP", "ONB-102-D9")
+    assert nt.portal.steps(nb, "capstone-verdict")["step"] == "ONB-102-D9"
+
+
+def test_a_figure_part_ticked_without_its_figure_says_so(capsys):
+    nt.portal.connect("notebooks/04_process_raw_fids.ipynb")
+    capsys.readouterr()
+    nt.portal.done("raw-overlay")
+    assert capsys.readouterr().out.startswith("Progress saved, without the overlay")
+    nt.portal.done("raw-overlay", figures=[_fig()])
+    assert capsys.readouterr().out.startswith("Overlay saved")
