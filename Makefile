@@ -9,7 +9,7 @@
 .PHONY: local test lint hooks run manifests clean
 
 local:
-	uv sync --group notebooks --extra explore
+	uv sync --group notebooks
 	uv run jupyter lab notebooks
 
 test:

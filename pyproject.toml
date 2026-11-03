@@ -29,9 +29,6 @@ dependencies = [
     "scipy>=1.11,<2",
 ]
 
-[project.optional-dependencies]
-explore = [ "plotly>=5,<8" ]
-
 [project.urls]
 Homepage = "https://github.com/Rakiura-Inc/morning-star-nmr"
 Source = "https://github.com/Rakiura-Inc/morning-star-nmr"

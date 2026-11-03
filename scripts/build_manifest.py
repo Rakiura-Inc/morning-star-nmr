@@ -42,7 +42,7 @@ _O_SULFOSERINE_NAME = re.compile(r"SZSSea-(OSulfLSer)-K-1Day-(1H|13C)-")
 _MECHANISM_NAME = re.compile(r"SZSSea-(AA\+A|AA|LAlaninamide|LGlycinamide)-(?:([HK])-)?(?:(1Week)-)?(1H|13C)-")
 
 
-def _fields(sample: str, acid: str, time: str, group: str, nucleus: str, repeat: bool = False) -> dict:
+def _fields(sample: str, acid: str, time: str, group: str, nucleus: str, *, repeat: bool = False) -> dict:  # noqa: PLR0917 (the manifest's fields, in its order)
     return {"sample": sample, "acid": acid, "time": time, "time_group": group, "nucleus": nucleus, "repeat": repeat}
 
 

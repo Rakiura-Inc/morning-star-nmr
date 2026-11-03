@@ -11,7 +11,7 @@ spectrum), copied unchanged from the Zenodo archive so you do not need the 275 M
 | 1 month | `SZSSea-ALA-1month-D2SO4lock-1H-05102023_1.zip` |
 
 Drag the zips into [NMRium](https://www.nmrium.org/) one at a time, oldest first, or let
-`nmrtrain` load them (`nt.load_series("8381013", "ALA", acid="K", nucleus="1H")`).
+`nmrtrain` load them (`nt.data.fetch("8381013", "alanine", acid="98%")`).
 
 ## Licence and attribution
 

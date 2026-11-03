@@ -106,7 +106,9 @@ def test_every_fill_in_cell_is_scaffolded(path):
             "Stuck? Open hint 2",
         ):
             assert part in above, (part, c["source"][:2])
-        before = "\n".join("".join(x["source"]) for x in cells[max(0, i - 4) : i] if x["cell_type"] == "markdown")
+        # The teaching section sits in the markdown just above, with worked cells (one idea each) between.
+        markdown_above = [x for x in cells[:i] if x["cell_type"] == "markdown"][-3:]
+        before = "\n".join("".join(x["source"]) for x in markdown_above)
         assert re.search(r"^#{2,3} ", before, re.MULTILINE), c["source"][:2]
         assert "Longer version:" not in before, c["source"][:2]
         assert "#" in "".join(c["source"]), "each line a member fills carries a comment"

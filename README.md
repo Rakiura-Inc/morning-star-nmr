@@ -2,8 +2,9 @@
 
 Python notebooks for reading NMR stability data, using the public spectra behind three open papers
 on molecules in concentrated sulfuric acid (the Venus cloud question). A small package, `nmrtrain`,
-fetches, loads, processes and plots the spectra and runs the checks. The judgment stays in the
-notebooks: what to compare, what the peaks say, and the verdict.
+fetches and caches the spectra, labels them, runs the checks and saves the hand-in. The analysis
+stays in the notebooks, in the field's own calls (nmrglue, scipy, numpy, matplotlib), and so does
+the judgment: what to compare, what the peaks say, and the verdict.
 
 > **Answer keys:** the notebooks compare a verdict only with calls the papers state (Ala-Ala and
 > Gly-Gly in 98% acid). For every other case, members check their call against the paper's

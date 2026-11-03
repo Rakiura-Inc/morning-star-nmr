@@ -29,15 +29,28 @@ Modes (environment variable RAKIURA_LIVE):
 
 from __future__ import annotations
 
-import datetime as _dt
+import datetime as dt
 import json
 import os
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
-from ._safe import quietly
+T = TypeVar("T")
+
+
+def quietly(call: Callable[[], T], default: T) -> T:
+    """call(), or default if it raises anything at all.
+
+    The one broad catch in the package: the Rakiura helper is optional and talks to the network,
+    and whatever goes wrong there, the notebook keeps running in offline mode."""
+    try:
+        return call()
+    except Exception:  # noqa: BLE001 (any failure in the optional helper falls back to offline mode)
+        return default
+
 
 DEFAULT_REPO = "Rakiura-Inc/morning-star-nmr"
 _PART = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}$")
@@ -82,9 +95,9 @@ def _import_helper():
 
 def _key_without_click(helper) -> bool:
     """A key is available without a click: RAKIURA_KEY, a Colab secret, or a saved sign-in."""
-    if os.environ.get("RAKIURA_KEY") or quietly(lambda: helper._colab_secret(), None):
+    if os.environ.get("RAKIURA_KEY") or quietly(helper._colab_secret, None):
         return True
-    path = quietly(lambda: helper._credentials_path(), None) or DEFAULT_CREDENTIALS.expanduser()
+    path = quietly(helper._credentials_path, None) or DEFAULT_CREDENTIALS.expanduser()
     return Path(path).exists()
 
 
@@ -125,18 +138,20 @@ def connect(notebook: str, repo: str = DEFAULT_REPO, handin_dir: str | None = No
     never waits. ``sign_in=True`` (the Connect cell) also runs the helper's sign-in: it prints a
     link, the member checks the code and clicks Allow. RAKIURA_LIVE=0 keeps both offline.
     """
-    mode = quietly(lambda: _connect(notebook, repo, handin_dir, sign_in), None)
-    if mode is None:  # never stop a notebook over the connection
+    try:
+        return _connect(notebook, repo, handin_dir, sign_in)
+    except Exception:  # noqa: BLE001 (never stop a notebook over the connection)
         state.helper, state.mode = None, "offline"
         print(NOT_CONNECTED)
         return "offline"
-    return mode
 
 
 def _start_live(helper, notebook: str, repo: str, loud: bool) -> bool:
     """Open a run through the helper. Quiet unless a sign-in link may be needed."""
     try:
-        return bool(quietly(lambda: helper.start(notebook=notebook, repo=repo, quiet=not loud), False))
+        return bool(helper.start(notebook=notebook, repo=repo, quiet=not loud))
+    except Exception:  # noqa: BLE001 (a failed start means offline mode, never a stopped notebook)
+        return False
     finally:
         _speak(helper)
 
@@ -198,11 +213,13 @@ def _log_path() -> Path:
 
 
 def _clean_numbers(numbers: dict | None) -> dict | None:
-    """Named single values as the portal takes them, or None if any value is not one (or too many)."""
+    """Named single values as the portal takes them, or None if any value is not one (or too many).
+    An answer left empty (None or "") is sent as "blank"."""
     clean = {}
     for name, value in (numbers or {}).items():
-        value = value.item() if hasattr(value, "item") else value  # a numpy scalar becomes a Python one
-        if value is None:
+        if hasattr(value, "item"):
+            value = value.item()  # a numpy scalar becomes a Python one
+        if value is None or value == "":
             value = "blank"
         if not isinstance(value, (bool, int, float, str)):
             return None
@@ -211,30 +228,39 @@ def _clean_numbers(numbers: dict | None) -> dict | None:
 
 
 def _offline_log(entry: dict) -> None:
-    state.log.append({**entry, "at": _dt.datetime.now().isoformat(timespec="seconds")})
+    state.log.append({**entry, "at": dt.datetime.now().isoformat(timespec="seconds")})
     Path(state.handin_dir).mkdir(parents=True, exist_ok=True)
     _log_path().write_text(json.dumps(state.log, indent=2))
 
 
-def done(part: str, figures: list | None = None, numbers: dict | None = None) -> bool:
-    """Tick a part. Live: rakiura.done(...). Offline: one line in the local log."""
+def _done_problem(part: str, figures: list, clean: dict | None) -> str | None:
+    """Why a tick cannot be sent, in one line, or None when it can."""
     if not isinstance(part, str) or not _PART.match(part):
-        print('rakiura: a part name is letters, digits and . _ : - (for example "part-2").')
-        return False
-    clean = _clean_numbers(numbers)
+        return 'rakiura: a part name is letters, digits and . _ : - (for example "part-2").'
     if clean is None:
-        print(f"rakiura: numbers takes up to {MAX_NUMBERS} named single values, never a table or an array.")
-        return False
+        return f"rakiura: numbers takes up to {MAX_NUMBERS} named single values, never a table or an array."
+    if any(not getattr(figure, "axes", None) for figure in figures):
+        return "rakiura: that figure is empty; pass the figure you drew on (fig, ax = plt.subplots())."
+    return None
+
+
+def done(part: str, figures: list | None = None, numbers: dict | None = None) -> None:
+    """Tick a part. Live: rakiura.done(...). Offline: one line in the local log.
+
+    Returns None, so a cell can end with it and print only its one line; `state.last_part` says
+    whether the tick went through."""
     figures = list(figures or [])
-    if any(not getattr(f, "axes", None) for f in figures):
-        print("rakiura: that figure is empty; pass the figure you drew on (fig, ax = plt.subplots()).")
-        return False
+    clean = _clean_numbers(numbers)
+    problem = _done_problem(part, figures, clean)
+    if problem:
+        print(problem)
+        return
     state.last_part = part
     if state.mode == "live":
-        return bool(state.helper.done(part, figures=figures or None, numbers=clean or None))
+        state.helper.done(part, figures=figures or None, numbers=clean or None)
+        return
     _offline_log({"part": part, "figures": len(figures), "numbers": clean})
     print(f"{saved_words(part)} (offline mode: kept on this computer).")
-    return True
 
 
 # What a member reads when a part is ticked. The part name itself stays internal (the portal keys on it).

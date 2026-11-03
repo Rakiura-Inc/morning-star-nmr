@@ -48,7 +48,8 @@ def test_offline_mode_logs_and_saves_files(tmp_path, capsys):
 def test_offline_ticks_print_plain_words_not_part_names(capsys):
     nt.portal.connect("notebooks/01_capstone_ala_ala_vs_gly_gly.ipynb")
     capsys.readouterr()
-    assert nt.portal.done("capstone-predict")
+    nt.portal.done("capstone-predict")
+    assert nt.portal.state.last_part == "capstone-predict"
     out = capsys.readouterr().out
     assert out.strip() == "Prediction saved (offline mode: kept on this computer)."
     log = json.loads(Path(nt.portal.state.handin_dir, "rakiura_progress.json").read_text())
@@ -63,10 +64,15 @@ def test_reveal_refuses_before_a_prediction(capsys):
 
 def test_part_names_and_numbers_are_validated(capsys):
     nt.portal.connect("nb.ipynb")
-    assert nt.portal.done("bad part!") is False
-    assert nt.portal.done("ok", numbers={"x": [1, 2]}) is False
-    assert nt.portal.done("ok", numbers={f"n{i}": i for i in range(21)}) is False
-    assert nt.portal.done("ok", figures=[plt.figure()]) is False
+    capsys.readouterr()
+    nt.portal.done("bad part!")
+    assert "a part name is letters" in capsys.readouterr().out
+    nt.portal.done("ok", numbers={"x": [1, 2]})
+    assert "never a table" in capsys.readouterr().out
+    nt.portal.done("ok", numbers={f"n{i}": i for i in range(21)})
+    assert "never a table" in capsys.readouterr().out
+    nt.portal.done("ok", figures=[plt.figure()])
+    assert "that figure is empty" in capsys.readouterr().out
 
 
 def test_fill_keeps_the_notebook_running(capsys):

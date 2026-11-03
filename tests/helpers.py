@@ -31,4 +31,43 @@ def synthetic(
     y = np.zeros_like(ppm)
     for c, h in list(peaks) + ([(acid_ppm, acid_height)] if acid_ppm is not None else []):
         y += h / (1 + ((ppm - c) / width) ** 2)
-    return nt.Spectrum(ppm=ppm, y=y, sample=sample, acid=acid, time=time, nucleus=nucleus, sf=sf)
+    return nt.Spectrum(ppm=ppm, intensity=y, sample=sample, acid=acid, time=time, nucleus=nucleus, spectrometer_mhz=sf)
+
+
+def notebook_functions(name):
+    """The functions and constants a notebook defines in its own cells, as a namespace.
+
+    Only top-level `def`s and ALL_CAPS constants with literal values are run, with the setup
+    cell's imports, so the teaching code can be tested without running the notebook."""
+    import ast
+    import json
+
+    import matplotlib.pyplot as plt
+    import nmrglue as ng
+    from scipy.signal import find_peaks, peak_widths
+
+    path = next(p for p in NOTEBOOKS if p.name.startswith(name))
+    namespace = {"nt": nt, "ng": ng, "np": np, "plt": plt, "find_peaks": find_peaks, "peak_widths": peak_widths}
+    for cell in json.loads(path.read_text())["cells"]:
+        source = "".join(cell["source"])
+        if cell["cell_type"] != "code" or "%pip" in source:
+            continue
+        for node in ast.parse(source).body:
+            is_constant = (
+                isinstance(node, ast.Assign)
+                and all(isinstance(t, ast.Name) and t.id.isupper() for t in node.targets)
+                and _is_literal(node.value)
+            )
+            if isinstance(node, ast.FunctionDef) or is_constant:
+                exec(compile(ast.Module([node], []), str(path), "exec"), namespace)  # noqa: S102 (our own notebooks)
+    return namespace
+
+
+def _is_literal(node):
+    import ast
+
+    try:
+        ast.literal_eval(node)
+    except ValueError:
+        return isinstance(node, ast.BinOp)  # such as 1 / 3
+    return True

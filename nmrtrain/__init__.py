@@ -1,15 +1,17 @@
 """nmrtrain: the plumbing behind the Morning Star Missions NMR training notebooks.
 
-Library for plumbing, notebook for judgment: this package finds and loads the spectra, fixes
-the axis direction once, draws the plots and runs the checks. Choosing what to compare, reading
-the peaks and making the call stay in the notebooks.
+The notebooks do the analysis in the open, with nmrglue, scipy, numpy and matplotlib: reading a
+spectrum, processing a raw signal, picking peaks, measuring areas and stacking plots. This package
+does the rest: it fetches and caches the public spectra (`data`), unpacks and labels them (`io`,
+`names`), runs the trap checks and the feedback against published calls (`checks`, `answers`),
+records answers and hand-ins (`record`) and connects to Rakiura (`portal`).
 """
 
 __version__ = "0.1.0"
 
 # The version is set before the submodules load: `data` reads it for its User-Agent.
-from . import answers, checks, data, io, peaks, plot, portal, process, record
-from .io import Spectrum, load_fid, load_processed, load_series
+from . import answers, checks, data, io, names, peaks, plot, portal, record
+from .io import Spectrum
 
 __all__ = [
     "Spectrum",
@@ -17,12 +19,9 @@ __all__ = [
     "checks",
     "data",
     "io",
-    "load_fid",
-    "load_processed",
-    "load_series",
+    "names",
     "peaks",
     "plot",
     "portal",
-    "process",
     "record",
 ]
