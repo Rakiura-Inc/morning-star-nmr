@@ -5,6 +5,7 @@
     "01_capstone_ala_ala_vs_gly_gly.ipynb": {
       "project": "ONB-102", "step": null,
       "parts": {"capstone-predict": "predictions made, then revealed",
+                "alanine-verdict": "alanine stacked and called (figures, verdict)",
                 "capstone-stack": "Ala-Ala stacked in time order (figure)",
                 "capstone-compare": "1 day vs 4 months compared (figure)",
                 "capstone-verdict": "verdict handed in (figures, verdict.json, numbers)"}
@@ -17,7 +18,8 @@
     "03_amino_acid_side_chains.ipynb": {
       "project": "RES-102", "step": null,
       "parts": {"amino-acid-stack": "the chosen amino acid stacked (figure)",
-                "amino-acid-verdict": "backbone signal and verdict handed in"}
+                "amino-acid-verdict": "backbone signal, carbon peaks and verdict handed in",
+                "serine-verdict": "serine against O-sulfoserine (figure, verdict)"}
     },
     "04_process_raw_fids.ipynb": {
       "project": "RES-102", "step": null,
