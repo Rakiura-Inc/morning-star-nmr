@@ -39,7 +39,7 @@ CONFIDENCE = ("low", "medium", "high")
 # 98% (K): 11.43 to 11.58 ppm; a few early spectra sit near 11.08 (referenced differently).
 # 81% (H): 11.66 to 12.08 ppm, depending on the sample.
 ACID_WINDOW = {"K": (11.5, 0.5), "H": (11.85, 0.4), None: (11.6, 0.65)}
-ACID_ZONE = _peaks.ACID_AREA  # never cite a peak in here as the sample's own
+ACID_ZONE = _peaks.ACID_REGION_PPM  # never cite a peak in here as the sample's own
 EXCHANGEABLE = (6.3, 9.6)  # NH and NH3+ signals of non-aromatic samples sit here in this acid
 AROMATIC = {"FF", "YY", "WW", "HH", "PHE", "TYR", "TRP", "HIS"}
 ACID_MIN_SHARE = 0.2  # the 10 to 13 ppm peak counts as the acid's when it is at least this share of the tallest
@@ -237,17 +237,17 @@ MOSTLY_GONE = 0.5  # less than half the first spectrum's signal (against the aci
 
 def _signal_against_acid(spectrum: Spectrum, low_ppm: float, high_ppm: float) -> float:
     """All the sample's signal between two ppm values, divided by the acid peak's area."""
-    acid_area = max(_peaks.area(spectrum, *ACID_ZONE), 1e-12)  # never divide by zero on an empty acid window
-    return _peaks.area(spectrum, low_ppm, high_ppm) / acid_area
+    acid_area = max(_peaks.peak_area(spectrum, *ACID_ZONE), 1e-12)  # never divide by zero on an empty acid window
+    return _peaks.peak_area(spectrum, low_ppm, high_ppm) / acid_area
 
 
 def check_signal_loss(first: Spectrum, last: Spectrum, low_ppm: float = 1.0, high_ppm: float = 6.5) -> Feedback:
     """Most of the sample's signal gone, relative to the acid, with nothing new: maybe it came out of solution."""
     first_amount = _signal_against_acid(first, low_ppm, high_ppm)
     kept = _signal_against_acid(last, low_ppm, high_ppm) / first_amount if first_amount > 0 else 1.0
-    first_ppm = [peak["ppm"] for peak in _peaks.pick(first, low_ppm, high_ppm)]
-    last_ppm = [peak["ppm"] for peak in _peaks.pick(last, low_ppm, high_ppm) if peak["height"] >= MIN_NEW_HEIGHT]
-    new = _peaks.compare(first_ppm, last_ppm)["new"]
+    first_ppm = [peak["ppm"] for peak in _peaks.pick_peaks(first, low_ppm, high_ppm)]
+    last_ppm = [peak["ppm"] for peak in _peaks.pick_peaks(last, low_ppm, high_ppm) if peak["height"] >= MIN_NEW_HEIGHT]
+    new = _peaks.compare_peaks(first_ppm, last_ppm)["new"]
     if kept < MOSTLY_GONE and not new:
         return Feedback(
             "trap",
@@ -623,7 +623,7 @@ def check_verdict(entry: dict, case: dict) -> list[Feedback]:
     """Feedback on one verdict ({"call", "lost_ppm", "new_ppm", "kept_ppm", "product_guess", "confidence"})
     against one answer-key case. A case with no published call points to the paper's tables.
     'unsure' is always a fair answer."""
-    tolerance_ppm = case.get("tolerance_ppm", 0.05)
+    tolerance_ppm = case.get("tolerance_ppm", _peaks.SAME_PEAK_PPM)
     sample = case.get("sample", "")
     entry = entry or {}
     call = plain_call(entry.get("call", ""))
@@ -694,7 +694,7 @@ def check_backbone(ppm, case: dict | None = None) -> Feedback:
     """The member's backbone signal (the alpha hydrogen). Compared only when the case names one;
     otherwise it is saved for the reviewer."""
     case = case or {}
-    tolerance_ppm = case.get("tolerance_ppm", 0.05)
+    tolerance_ppm = case.get("tolerance_ppm", _peaks.SAME_PEAK_PPM)
     if ppm is ... or ppm is None:
         return Feedback("to do", "No backbone signal chosen yet.")
     ppm = float(ppm)

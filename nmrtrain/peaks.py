@@ -1,7 +1,8 @@
 """The measurements the trap checks make on a spectrum.
 
-The notebooks teach peak picking, areas and line widths in their own cells (`pick_peaks`,
-`peak_area`, `linewidth_hz`), with scipy and numpy in the open. The trap checks in `checks.py` need
+The notebooks teach peak picking, comparing and areas in their own cells (`pick_peaks`,
+`compare_peaks`, `peak_area`, and `peak_width_hz` for line widths), with scipy and numpy in
+the open. The trap checks in `checks.py` need
 the same measurements without reaching into a member's notebook, so they use this module.
 `tests/test_notebook_methods.py` runs the notebooks' versions against these on the same spectra,
 so the two stay in step: change both, or neither.
@@ -14,8 +15,10 @@ from scipy.signal import find_peaks, peak_widths
 
 from .io import Spectrum
 
-# The acid's own peak (sulfuric acid and its water) sits between 11.4 and 12.1 ppm in these datasets.
-ACID_AREA = (10.0, 13.0)
+# Where the acid's own peak (sulfuric acid and its water) sits: 11.4 to 12.1 ppm in these datasets.
+ACID_REGION_PPM = (10.0, 13.0)
+READ_PPM = (1.0, 6.5)  # the hydrogens on carbon of the dipeptides sit in here
+SAME_PEAK_PPM = 0.05  # two peaks this close, in two spectra of one sample, are the same peak
 PROMINENCE = 0.02  # a line must stand this far (a share of the tallest) above its surroundings
 GROUP_PPM = 0.03  # lines closer than this belong to one signal (a doublet's two lines are 0.016 apart)
 
@@ -51,7 +54,7 @@ def _signal(lines: list[tuple[float, float]]) -> dict:
     return {"ppm": round(float(centre_ppm), 3), "lines": len(lines), "height": round(float(tallest), 3)}
 
 
-def pick(spectrum: Spectrum, low_ppm: float = 1.0, high_ppm: float = 6.5, min_height: float = 0.03) -> list[dict]:
+def pick_peaks(spectrum: Spectrum, low_ppm: float = 1.0, high_ppm: float = 6.5, min_height: float = 0.03) -> list[dict]:
     """Signals between two ppm values, high ppm first: [{"ppm", "lines", "height"}].
 
     min_height is a share of the tallest point in the region. Lines closer than GROUP_PPM merge into
@@ -64,7 +67,7 @@ def pick(spectrum: Spectrum, low_ppm: float = 1.0, high_ppm: float = 6.5, min_he
     return signals[::-1]
 
 
-def compare(first_ppm: list[float], last_ppm: list[float], tolerance_ppm: float = 0.05) -> dict:
+def compare_peaks(first_ppm: list[float], last_ppm: list[float], tolerance_ppm: float = SAME_PEAK_PPM) -> dict:
     """Signals kept, lost and new between two lists of positions."""
     changes = {"kept": [], "lost": [], "new": []}
     for ppm in first_ppm:
@@ -88,7 +91,7 @@ def linewidth_hz(spectrum: Spectrum, near_ppm: float, half_window_ppm: float = 0
     return float(widths_in_points[0] * ppm_per_point * spectrum.spectrometer_mhz)
 
 
-def area(spectrum: Spectrum, low_ppm: float, high_ppm: float) -> float:
+def peak_area(spectrum: Spectrum, low_ppm: float, high_ppm: float) -> float:
     """Sum of intensity between two ppm values (rough: these spectra were not run for exact areas)."""
     _, intensity = spectrum.region(low_ppm, high_ppm)
     return float(intensity.sum())

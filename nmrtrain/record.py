@@ -19,6 +19,7 @@ from . import __version__, portal
 from .checks import CALLS, CONFIDENCE, HARSHER, LEFT, key_call, plain_call, quoted, show_format
 from .data import RECORDS
 from .names import ACID_WT_PCT, sample_name
+from .peaks import SAME_PEAK_PPM
 
 FIGURE_DPI = 130
 COMMIT_CHARS = 12
@@ -54,7 +55,7 @@ def predict(question: str, prediction) -> None:
 def revealed(question: str) -> bool:
     """True when the reveal may run. Otherwise prints one line and returns False."""
     if question not in _predictions:
-        print("Make your prediction in the cell above first.")
+        print("Make your prediction first: fill in the prediction cell above and run it, then run this cell again.")
         return False
     _reveals.setdefault(question, _now())
     return True
@@ -296,7 +297,7 @@ _FIELD_WORDS = {
     "product_guess": "the product guess",
     "note": "the note",
 }
-_SAME_PEAK_PPM = 0.05  # a picked peak this close to one the member wrote is the same peak
+_SAME_PEAK_PPM = SAME_PEAK_PPM  # a picked peak this close to one the member wrote is the same peak
 
 
 def _write_down_list(name: str, value, who: str, field: str, *, suggestion: list | None) -> None:

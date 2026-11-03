@@ -28,7 +28,7 @@ def test_every_notebook_picks_peaks_as_the_trap_checks_do(name, aa_zip):
     functions = notebook_functions(name)
     spectra = [synthetic(AA_1DAY), synthetic(AA_4MO), functions["read_spectrum"](aa_zip)]
     for spectrum in spectra:
-        assert functions["pick_peaks"](spectrum, (1.0, 6.5), min_height=0.03) == nt.peaks.pick(spectrum)
+        assert functions["pick_peaks"](spectrum, (1.0, 6.5), min_height=0.03) == nt.peaks.pick_peaks(spectrum)
 
 
 def test_pick_merges_a_doublet_and_orders_high_to_low(nb01):
@@ -38,25 +38,25 @@ def test_pick_merges_a_doublet_and_orders_high_to_low(nb01):
 
 
 def test_compare_kept_lost_new(nb01):
-    first = [peak["ppm"] for peak in nb01["pick_peaks"](synthetic(AA_1DAY), (1.0, 6.5), 0.03)]
-    last = [peak["ppm"] for peak in nb01["pick_peaks"](synthetic(AA_4MO), (1.0, 6.5), 0.03)]
+    first = [peak["ppm"] for peak in nb01["pick_peaks"](synthetic(AA_1DAY), (1.0, 6.5), min_height=0.03)]
+    last = [peak["ppm"] for peak in nb01["pick_peaks"](synthetic(AA_4MO), (1.0, 6.5), min_height=0.03)]
     changes = nb01["compare_peaks"](first, last)
-    assert changes == nt.peaks.compare(first, last)
+    assert changes == nt.peaks.compare_peaks(first, last)
     assert [round(ppm, 2) for ppm in changes["lost"]] == [5.3, 1.78]
     assert [round(ppm, 2) for ppm in changes["new"]] == [6.1, 6.03]
 
 
 def test_peak_width_matches_the_trap_check(nb01):
     broad = synthetic(AA_1DAY, width=0.012)
-    peak_ppm, width_hz = nb01["peak_width_hz"](broad, near_ppm=2.28)
-    assert width_hz == nt.peaks.linewidth_hz(broad, 2.28) and abs(peak_ppm - 2.28) < 0.02
+    peak = nb01["peak_width_hz"](broad, near_ppm=2.28)
+    assert peak["width_hz"] == nt.peaks.linewidth_hz(broad, 2.28) and abs(peak["ppm"] - 2.28) < 0.02
 
 
 def test_how_much_is_left_is_measured_against_the_acid_peak(nb01):
     first = synthetic(AA_1DAY)
     half = synthetic([(ppm, height * 0.5) for ppm, height in AA_1DAY], time="8day")
     gone = synthetic([(ppm, height * 0.1) for ppm, height in AA_1DAY], time="4Month")
-    ratios = nb01["area_ratios"]([first, half, gone], (1.75, 1.81), nb01["ACID_PEAK_PPM"])
+    ratios = nb01["area_ratios"]([first, half, gone], (1.75, 1.81), nb01["ACID_REGION_PPM"])
     left = nb01["share_of_first"](ratios)
     assert left[0] == 1.0 and abs(left[1] - 0.5) < 0.02 and abs(left[2] - 0.1) < 0.02
     levels = [nb01["how_much_is_left"](share) for share in (1.5, 1.0, 0.5, 0.34, 0.33, 0.0)]
@@ -72,7 +72,7 @@ def test_survival_compares_the_molecules_own_peaks():
     # Only the alpha near 5.30 ppm falls: the ratio to the other alpha falls with it.
     one = synthetic([(ppm, height * (0.2 if ppm > 5 else 1.0)) for ppm, height in AA_1DAY], time="4Month")
     followed = nb02["follow_peak"]([first, both, one], peak_ppm=5.30, other_ppm=4.70)
-    own = followed["own"]
+    own = followed["against_other"]
     assert own[0] == 1.0 and abs(own[1] - 1.0) < 0.02 and abs(own[2] - 0.2) < 0.02
     assert abs(nb02["next_tallest_ppm"](first, (1.0, 6.5), away_from_ppm=2.28) - 1.78) < 0.03
     assert nb02["share_of_first"]([0.0, 0.5]) == [0.0, 0.0]  # a chosen peak missing at the first time point

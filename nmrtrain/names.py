@@ -46,6 +46,12 @@ def acid_code(acid: str | None) -> str | None:
     return acid
 
 
+def case_words(case: str) -> tuple[str, str]:
+    """A case such as "ASN-K" in the steps' words: ("asparagine", "98%")."""
+    code, acid = case.split("-")
+    return sample_name(code), ACID_STRENGTH[acid]
+
+
 # A time label in a file name: a number, a unit, and an R when the spectrum was run again ("4MonthR").
 _TIME_LABEL = re.compile(r"(\d+)\s*([A-Za-z]+?)(R?)$")
 

@@ -59,7 +59,7 @@ def test_offline_ticks_print_plain_words_not_part_names(capsys):
 def test_reveal_refuses_before_a_prediction(capsys):
     nt.record.predict("blank", {"a": ...})
     assert nt.record.revealed("blank") is False
-    assert "prediction in the cell above first" in capsys.readouterr().out
+    assert "Make your prediction first" in capsys.readouterr().out
 
 
 def test_part_names_and_numbers_are_validated(capsys):

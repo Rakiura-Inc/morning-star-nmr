@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 from importlib import resources
 
+from .peaks import SAME_PEAK_PPM
+
 # Where a member checks a case that has no key, per key name.
 DIPEPTIDE_TABLES = "Table 1 (81%) and Table 2 (98%) of the paper (Petkowski et al. 2024, Sci. Rep. 14, 17083)"
 AMINO_ACID_TABLE = "Table 1 of the paper (M. D. Seager et al. 2024, Astrobiology 24, 386)"
@@ -47,5 +49,5 @@ def case(key: dict, case_id: str) -> dict:
     c = dict(key.get("cases", {}).get(case_id) or {"call": None})
     c.setdefault("sample", case_id.split("-")[0])
     c.setdefault("check_against", key.get("check_against", "the paper's tables"))
-    c.setdefault("tolerance_ppm", key.get("tolerance_ppm", 0.05))
+    c.setdefault("tolerance_ppm", key.get("tolerance_ppm", SAME_PEAK_PPM))
     return c
