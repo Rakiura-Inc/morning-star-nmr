@@ -53,10 +53,10 @@ and 4Month. If you load them all at once, they sort as 1day, 3day, 4Month, 5week
 time order. The Gly-Gly files (GG-K) are optional. Zoom to 1 to 6.5 ppm.
 
 The second candidate product: from [Zenodo 11122291](https://zenodo.org/records/11122291), download
-SUPPLEMENTARY_DATASETS_1-5.zip (about 100 MB) and open SZSSea-LAlaninamide-1H-06072024_1.zip in its
+"SUPPLEMENTARY DATASETS 1-5.zip" (about 100 MB) and open SZSSea-LAlaninamide-1H-06072024_1.zip in its
 Dataset S4 folder.
 
-What to look at: notebook 01, Parts 2 to 4. Hand in Ala-Ala's 1 day and 4 month spectra, stacked,
+What to look at: notebook 01, Parts 2 to 5. Hand in Ala-Ala's 1 day and 4 month spectra, stacked,
 with the peaks labelled in ppm, and a note: your decision and the peaks that support it, in ppm;
 what you think the main product is, and why; how sure you are.
 

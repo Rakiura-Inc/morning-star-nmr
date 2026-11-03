@@ -317,3 +317,22 @@ def test_without_a_key_the_helper_is_not_asked_to_sign_in(monkeypatch, capsys):
     monkeypatch.setenv("RAKIURA_CREDENTIALS", "/nonexistent/creds")
     assert nt.portal.connect("nb.ipynb") == "offline"
     assert "Run the Connect cell below" in capsys.readouterr().out
+
+
+def test_steps_per_part_and_the_older_per_notebook_format(tmp_path, monkeypatch):
+    shipped = json.loads((ROOT / "notebooks" / "rakiura_steps.json").read_text())["notebooks"]
+    for name, entry in shipped.items():
+        for part, part_entry in entry["parts"].items():
+            assert part_entry["step"].startswith(("ONB-102-D", "RES-102-D")), (name, part)
+    steps = tmp_path / "steps.json"
+    monkeypatch.setenv("NMRTRAIN_STEPS", str(steps))
+    monkeypatch.delenv("RAKIURA_STEP", raising=False)
+    nb = "notebooks/01_capstone_ala_ala_vs_gly_gly.ipynb"
+    steps.write_text(json.dumps({"notebooks": {Path(nb).name: shipped[Path(nb).name]}}))
+    assert nt.portal.steps(nb, "capstone-predict")["step"] == "ONB-102-D5"
+    assert nt.portal.steps(nb, "glygly-reading")["step"] == "RES-102-D9"
+    older = {"step": "ONB-102-D7", "parts": {"capstone-verdict": "verdict handed in"}}
+    steps.write_text(json.dumps({"notebooks": {Path(nb).name: older}}))
+    assert nt.portal.steps(nb, "capstone-verdict")["step"] == "ONB-102-D7"
+    monkeypatch.setenv("RAKIURA_STEP", "ONB-102-D9")
+    assert nt.portal.steps(nb, "capstone-verdict")["step"] == "ONB-102-D9"

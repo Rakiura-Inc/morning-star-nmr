@@ -1,33 +1,34 @@
 {
-  "_about": "Where each notebook's files are staged on Rakiura. Ticks (nt.portal.done) need no ids: a PI links each part name to a checklist item under Settings > Notebook links, keyed by the notebook path. Staging the verdict file needs a step id: fill in 'step' (for example \"ONB-102-D7\") once the step exists, or set RAKIURA_STEP for one session. Leave null to have members attach files on the step page.",
+  "_about": "Where each notebook's files are staged on Rakiura. Ticks (nt.portal.done) need no ids: a PI links each part name to a checklist item under Settings > Notebook links, keyed by the notebook path. Staging the verdict file needs a step id: each part names its step's displayId. A notebook-level \"step\" still works for every part that names none, and RAKIURA_STEP overrides both for one session. A part with no step: members attach its files on the step page.",
   "projects": {"bootcamp": "ONB-102", "research": "RES-102"},
   "notebooks": {
     "01_capstone_ala_ala_vs_gly_gly.ipynb": {
-      "project": "ONB-102", "step": null,
-      "parts": {"capstone-predict": "predictions made, then revealed",
-                "alanine-verdict": "alanine stacked and called (figures, verdict)",
-                "capstone-stack": "Ala-Ala stacked in time order (figure)",
-                "capstone-compare": "1 day vs 4 months compared (figure)",
-                "capstone-verdict": "verdict handed in (figures, verdict.json, numbers)"}
+      "project": "ONB-102",
+      "parts": {"capstone-predict": {"step": "ONB-102-D5", "about": "predictions made, then revealed"},
+                "alanine-verdict": {"step": "ONB-102-D6", "about": "alanine stacked and called (figures, verdict)"},
+                "capstone-stack": {"step": "ONB-102-D7", "about": "Ala-Ala stacked in time order (figure)"},
+                "capstone-compare": {"step": "ONB-102-D7", "about": "1 day vs 4 months compared (figure)"},
+                "capstone-verdict": {"step": "ONB-102-D7", "about": "verdict handed in (figures, verdict.json, numbers)"},
+                "glygly-reading": {"step": "RES-102-D9", "about": "the zoomed Gly-Gly spectra and a note (NMR project Extra)"}}
     },
     "02_one_dipeptide_both_acids.ipynb": {
-      "project": "RES-102", "step": null,
-      "parts": {"dipeptide-stack": "both acid series stacked (figure)",
-                "dipeptide-verdict": "verdict and replication rows handed in"}
+      "project": "RES-102",
+      "parts": {"dipeptide-stack": {"step": "RES-102-D1", "about": "both acid series stacked (figure)"},
+                "dipeptide-verdict": {"step": "RES-102-D1", "about": "verdict and replication rows handed in"}}
     },
     "03_amino_acid_side_chains.ipynb": {
-      "project": "RES-102", "step": null,
-      "parts": {"amino-acid-stack": "the chosen amino acid stacked (figure)",
-                "amino-acid-verdict": "backbone signal, carbon peaks and verdict handed in",
-                "serine-verdict": "serine against O-sulfoserine (figure, verdict)"}
+      "project": "RES-102",
+      "parts": {"amino-acid-stack": {"step": "RES-102-D2", "about": "the chosen amino acid stacked (figure)"},
+                "amino-acid-verdict": {"step": "RES-102-D2", "about": "backbone signal, carbon peaks and verdict handed in"},
+                "serine-verdict": {"step": "RES-102-D10", "about": "serine against O-sulfoserine (figure, verdict)"}}
     },
     "04_process_raw_fids.ipynb": {
-      "project": "RES-102", "step": null,
-      "parts": {"raw-overlay": "own processing over the instrument's (figure, line differences, similarity, decision)"}
+      "project": "RES-102",
+      "parts": {"raw-overlay": {"step": "RES-102-D3", "about": "own processing over the instrument's (figure, line differences, similarity, decision)"}}
     },
     "05_read_a_13c_series.ipynb": {
-      "project": "RES-102", "step": null,
-      "parts": {"c13-verdict": "13C verdict handed in"}
+      "project": "RES-102",
+      "parts": {"c13-verdict": {"step": "RES-102-D7", "about": "13C verdict handed in"}}
     }
   }
 }

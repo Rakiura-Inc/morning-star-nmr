@@ -108,21 +108,27 @@ def _steps_file() -> Path | None:
         "rakiura_steps.json",
         Path("notebooks", "rakiura_steps.json"),
         Path(__file__).parent.parent / "notebooks" / "rakiura_steps.json",
+        Path(__file__).parent / "rakiura_steps.json",  # the copy built into the package (Colab)
     ]
     return next((Path(c) for c in candidates if c and Path(c).exists()), None)
 
 
-def steps(notebook: str | None = None) -> dict:
+def steps(notebook: str | None = None, part: str | None = None) -> dict:
     """Step ids for staging files, from $NMRTRAIN_STEPS or notebooks/rakiura_steps.json.
 
-    Returns {"project": ..., "step": ...} for one notebook (by file name), or the whole file.
-    $RAKIURA_STEP overrides the step for the current notebook.
+    Returns {"project": ..., "step": ...} for one notebook (by file name), or the whole file. The
+    step is the part's own ({"parts": {part: {"step": ...}}}) when it names one, else the
+    notebook's ("step" beside "parts", the older format, where a part maps to a description).
+    $RAKIURA_STEP overrides both for the current session.
     """
     path = _steps_file()
     conf: dict = json.loads(path.read_text()) if path else {}
     if notebook is None:
         return conf
     entry = dict(conf.get("notebooks", {}).get(Path(notebook).name, {}))
+    part_entry = entry.get("parts", {}).get(part)
+    if isinstance(part_entry, dict) and part_entry.get("step"):
+        entry["step"] = part_entry["step"]
     if os.environ.get("RAKIURA_STEP"):
         entry["step"] = os.environ["RAKIURA_STEP"]
     return entry
@@ -278,9 +284,9 @@ def saved_words(part: str) -> str:
     return _SAVED.get(part.rsplit("-", 1)[-1], "Progress saved")
 
 
-def stage_file(text: str, title: str, mime: str = "text/plain") -> bool:
-    """Add a small text file (up to 50 KB) to this notebook's step, when a step id is configured."""
-    step = steps(state.notebook or "").get("step")
+def stage_file(text: str, title: str, mime: str = "text/plain", part: str | None = None) -> bool:
+    """Add a small text file (up to 50 KB) to the part's step, when a step id is configured."""
+    step = steps(state.notebook or "", part).get("step")
     if state.mode == "live" and step:
         return bool(state.helper.stage_text(text, title, step=step, mime=mime))
     if state.mode == "live":

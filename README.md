@@ -130,15 +130,17 @@ notebooks carry no Rakiura ids). Full list with descriptions: `notebooks/rakiura
 
 | Notebook | Project | Parts |
 |---|---|---|
-| 01 | ONB-102 | `capstone-predict`, `alanine-verdict`, `capstone-stack`, `capstone-compare`, `capstone-verdict` |
+| 01 | ONB-102 | `capstone-predict`, `alanine-verdict`, `capstone-stack`, `capstone-compare`, `capstone-verdict`; `glygly-reading` (the RES-102 Extra on Gly-Gly) |
 | 02 | RES-102 | `dipeptide-stack`, `dipeptide-verdict` |
 | 03 | RES-102 | `amino-acid-stack`, `amino-acid-verdict`, `serine-verdict` |
 | 04 | RES-102 | `raw-overlay` |
 | 05 | RES-102 | `c13-verdict` |
 
-**Step ids** are needed only to stage the verdict file. Set `"step"` per notebook in
-`notebooks/rakiura_steps.json` (for example `"ONB-102-D7"`), or `RAKIURA_STEP` for one session,
-or point `NMRTRAIN_STEPS` at another file. Left `null`, members attach `verdict.json` by hand.
+**Step ids** are needed only to stage the verdict file. Each part in `notebooks/rakiura_steps.json`
+names its step (for example `"capstone-verdict": {"step": "ONB-102-D7", ...}`); a `"step"` beside
+`"parts"` (the older format) still covers every part that names none. `RAKIURA_STEP` overrides both
+for one session, and `NMRTRAIN_STEPS` points at another file. The file ships inside the package, so
+Colab finds it. A part with no step: members attach `verdict.json` by hand.
 Research projects still close other members' threads on first approval (D19), so notebooks 02
 to 05 need per-member mode before many members hand in on one step.
 

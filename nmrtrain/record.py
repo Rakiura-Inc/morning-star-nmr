@@ -157,7 +157,7 @@ def handin(  # noqa: PLR0913 (one argument for each thing a hand-in holds)
         nums["predicted_before_reveal"] = bool(record["predicted_before_reveal"])
     nums.update(numbers or {})
     portal.done(part, figures=list((figures or {}).values()), numbers=dict(list(nums.items())[: portal.MAX_NUMBERS]))
-    portal.stage_file(json.dumps(record, indent=1, default=str), f"{part} verdict.json")
+    portal.stage_file(json.dumps(record, indent=1, default=str), f"{part} verdict.json", part=part)
     print("Saved for your hand-in:")
     for p in saved:
         print(f"   {os.path.relpath(p)}")

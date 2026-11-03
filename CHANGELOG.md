@@ -1,6 +1,14 @@
 # Changelog
 
 ## Unreleased
+- Readiness audit fixes: one match-rule sentence (the glossary's) in notebooks 01, 02 and 03; the
+  RES-102 brief's "side chain changed" sentence in notebook 01 Part 1; notebook 01 Part 2 downloads
+  Ala-Ala's five spectra (about 2.5 MB); every hand-in box says how to download the files from
+  Colab; "line", not "row", for the filled examples; notebook 05's mechanism summary is folded under
+  Check your reading. Notebook 01 gains the `glygly-reading` hand-in for the NMR project Extra on
+  Gly-Gly (RES-102-D9). `rakiura_steps.json` gives every part its step id (per part; the older
+  per-notebook `"step"` still works) and ships inside the package. The NMRium guide names the
+  Zenodo file "SUPPLEMENTARY DATASETS 1-5.zip" and notebook 01's Parts 2 to 5.
 - Readable teaching code. The analysis each step teaches now sits in the notebooks, in the field's
   own calls, one idea per cell: reading a spectrum with `ng.bruker.read_pdata` and its ppm scale
   with `ng.fileiobase.uc_from_udic`; notebook 04's seven steps with `ng.bruker.remove_digital_filter`,

@@ -71,8 +71,9 @@ def _visible(text):
 # teaching they used to carry lives here. Each cap sits about 3 to 10% above the notebook's size
 # when tickets v1 landed (01: 4,033; 02: 2,548; 03: 2,815; 04: 1,381; 05: 1,535), so new text has
 # to replace old text rather than pile on. Notebook 01 carries the bootcamp's three NMR steps;
-# notebook 03 a project step and the serine Extra.
-MAX_VISIBLE_WORDS = {"01": 4150, "02": 2700, "03": 3000, "04": 1500, "05": 1700}
+# notebook 03 a project step and the serine Extra. Notebook 01's cap rose to 4400 for the Gly-Gly
+# Extra's hand-in (glygly-reading) and the readiness audit's Colab download lines.
+MAX_VISIBLE_WORDS = {"01": 4400, "02": 2700, "03": 3000, "04": 1500, "05": 1700}
 
 
 def test_markdown_stays_short():
