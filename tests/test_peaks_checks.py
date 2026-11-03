@@ -222,7 +222,7 @@ def test_format_messages_are_friendly_and_never_block():
 
 
 def test_write_down_confirms_by_name(capsys):
-    nt.record.write_down("AA_LOST_PPM", [2.08, 4.94], "Ala-Ala", "lost_ppm", suggestion=[5.17, 2.08])
+    assert nt.record.write_down("AA_LOST_PPM", [2.08, 4.94], "Ala-Ala", "lost_ppm", suggestion=[5.17, 2.08]) is None
     out = capsys.readouterr().out
     assert out.startswith("Saved AA_LOST_PPM = [2.08, 4.94]: 2 lost peaks for Ala-Ala, at 2.08 and 4.94 ppm.")
     assert "also listed 5.17" in out
@@ -326,3 +326,10 @@ def test_line_differences_find_the_largest_shift():
     assert nt.checks.line_feedback(d).kind == "agrees"
     far = nt.peaks.line_differences(synthetic([(p + 0.05, h) for p, h in AA_1DAY]), inst)
     assert nt.checks.line_feedback(far).kind == "look again"
+
+
+def test_saved_says_an_empty_answer_is_not_saved_yet(capsys):
+    nt.record.saved("ALA_PEAKS_PPM", [], "the peaks your call on alanine rests on")
+    assert capsys.readouterr().out.startswith("Not saved yet ALA_PEAKS_PPM = []")
+    nt.record.saved("ALA_PEAKS_PPM", [1.98, 4.62], "the peaks your call on alanine rests on")
+    assert capsys.readouterr().out.startswith("Saved ALA_PEAKS_PPM = [1.98, 4.62]")

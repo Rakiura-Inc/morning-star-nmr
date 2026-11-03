@@ -17,9 +17,9 @@ pip does. It supports Python 3.11 to 3.15; Colab currently runs 3.13.
 
 | # | Notebook | Where it is used | Time | Open in Colab |
 |---|---|---|---|---|
-| 01 | Do protein building blocks survive Venus's acid? Check the lab's answer yourself | Bootcamp (ONB-102), step 7 | 60 to 90 min | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Rakiura-Inc/morning-star-nmr/blob/main/notebooks/01_capstone_ala_ala_vs_gly_gly.ipynb) |
+| 01 | Do protein building blocks survive Venus's acid? Check the lab's answer yourself | Bootcamp (ONB-102): its three NMR steps, Parts 0 to 5 in order | 2 to 3 hours | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Rakiura-Inc/morning-star-nmr/blob/main/notebooks/01_capstone_ala_ala_vs_gly_gly.ipynb) |
 | 02 | Does weaker acid change what survives? Test one small peptide at two acid strengths (you pick it) | NMR project (RES-102), step 1, after notebook 01 | 60 to 90 min | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Rakiura-Inc/morning-star-nmr/blob/main/notebooks/02_one_dipeptide_both_acids.ipynb) |
-| 03 | Can a molecule change but not fall apart? Find the change in an amino acid's spectra | NMR project (RES-102), step 2, after notebook 02 | 45 to 60 min | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Rakiura-Inc/morning-star-nmr/blob/main/notebooks/03_amino_acid_side_chains.ipynb) |
+| 03 | Can a molecule change but not fall apart? Find the change in an amino acid's spectra | NMR project (RES-102), step 2 (Parts 1 to 4), and the Extra on serine (Part 5) | 60 to 105 min | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Rakiura-Inc/morning-star-nmr/blob/main/notebooks/03_amino_acid_side_chains.ipynb) |
 | 04 | Can you trust the instrument's spectrum? Process the raw data yourself | NMR project (RES-102), step 3 | 30 min | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Rakiura-Inc/morning-star-nmr/blob/main/notebooks/04_process_raw_fids.ipynb) |
 | 05 | Did the molecule really split in two? Count the peaks in a carbon spectrum | NMR project (RES-102), an Extra (optional) | 30 min | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Rakiura-Inc/morning-star-nmr/blob/main/notebooks/05_read_a_13c_series.ipynb) |
 
@@ -28,8 +28,9 @@ Each notebook has:
 * a short introduction
 * **predict, then reveal**: the reveal cell will not run until you enter a prediction
 * worked cells that you run and read
-* a **What you need** cell before every question: the facts it rests on, a figure or table where it
-  helps, and the matching bootcamp or NMR step by name
+* a **What you need** (or **What to look at**) cell before every question: the facts it rests on,
+  and a figure or table where it helps. The teaching lives here; the steps on Rakiura are short
+  tickets that link to the part they need
 * a **RECORD YOUR ANSWER** box above every cell a member fills in: what gets saved, where to look,
   how to fill it in, and two fold-out hints; each recording cell confirms what it saved
 * the verdict recorded one field at a time, next to the plot that answers it, then shown as one
@@ -42,6 +43,10 @@ Cells carry tags (`context`, `setup`, `worked`, `predict`, `do`,
 
 Executed copies are in `notebooks/executed/`: a first pass with blank answers, as a member first
 sees it, with the traps firing.
+
+Two pages in `docs/` go with the steps: [the triage score sheet](docs/triage-score-sheet.md) (the
+bootcamp's three tests for a gas) and [Working in NMRium](docs/working-in-nmrium.md) (the same
+spectra in the browser, without code, and what to hand in from there).
 
 ## Try it locally
 
@@ -124,9 +129,9 @@ notebooks carry no Rakiura ids). Full list with descriptions: `notebooks/rakiura
 
 | Notebook | Project | Parts |
 |---|---|---|
-| 01 | ONB-102 | `capstone-predict`, `capstone-stack`, `capstone-compare`, `capstone-verdict` |
+| 01 | ONB-102 | `capstone-predict`, `alanine-verdict`, `capstone-stack`, `capstone-compare`, `capstone-verdict` |
 | 02 | RES-102 | `dipeptide-stack`, `dipeptide-verdict` |
-| 03 | RES-102 | `amino-acid-stack`, `amino-acid-verdict` |
+| 03 | RES-102 | `amino-acid-stack`, `amino-acid-verdict`, `serine-verdict` |
 | 04 | RES-102 | `raw-overlay` |
 | 05 | RES-102 | `c13-verdict` |
 
@@ -212,6 +217,7 @@ links, install lines, `CITATION.cff`, `nmrtrain/portal.py`, `nmrtrain/data.py`) 
 nmrtrain/        data (Zenodo fetch, records.json, manifests/), io, process, peaks, plot, checks, answers,
                  record, portal; answer_keys/ holds published calls only (JSON)
 notebooks/       01 to 05, rakiura_steps.json, executed/
+docs/            triage-score-sheet.md, working-in-nmrium.md
 data/alanine/    the three alanine practice spectra (CC BY 4.0, Zenodo 8381013)
 replication/     schema.json, replications.csv, update_table.py
 scripts/         build_manifest.py, run_notebooks.py, set_repo.py

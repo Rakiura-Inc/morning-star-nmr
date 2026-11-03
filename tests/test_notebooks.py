@@ -67,20 +67,30 @@ def _visible(text):
     return re.sub(r"<details>.*?</details>", "", text, flags=re.DOTALL)
 
 
+# Visible words a notebook may hold. The steps on Rakiura are short tickets (tickets v1), so the
+# teaching they used to carry lives here. Each cap sits about 3 to 10% above the notebook's size
+# when tickets v1 landed (01: 4,033; 02: 2,548; 03: 2,815; 04: 1,381; 05: 1,535), so new text has
+# to replace old text rather than pile on. Notebook 01 carries the bootcamp's three NMR steps;
+# notebook 03 a project step and the serine Extra.
+MAX_VISIBLE_WORDS = {"01": 4150, "02": 2700, "03": 3000, "04": 1500, "05": 1700}
+
+
 def test_markdown_stays_short():
     # Fold-out hints are opt-in, so only the always-visible text counts.
     for path in NOTEBOOKS:
         words = sum(
             len(_visible("".join(c["source"])).split()) for c in _nb(path)["cells"] if c["cell_type"] == "markdown"
         )
-        assert words <= 2400, (path.name, words)
+        limit = MAX_VISIBLE_WORDS[path.name[:2]]
+        assert words <= limit, (path.name, words, limit)
 
 
 @pytest.mark.parametrize("path", NOTEBOOKS, ids=_name)
 def test_every_fill_in_cell_is_scaffolded(path):
     """Each cell a member writes in sits under a RECORD YOUR ANSWER box that says what is saved,
-    where to look and how to fill it in, with two fold-out hints; a What you need cell with a link
-    to the longer step comes before it."""
+    where to look and how to fill it in, with two fold-out hints; a section that teaches what the
+    answer needs (What you need, What to look at, or the part's own heading) comes before it. The
+    steps on Rakiura are short tickets, so the teaching is here, not behind a "Longer version" link."""
     cells = _nb(path)["cells"]
     for i, c in enumerate(cells):
         tags = c["metadata"]["tags"]
@@ -97,7 +107,8 @@ def test_every_fill_in_cell_is_scaffolded(path):
         ):
             assert part in above, (part, c["source"][:2])
         before = "\n".join("".join(x["source"]) for x in cells[max(0, i - 4) : i] if x["cell_type"] == "markdown")
-        assert "### What you need" in before and "Longer version:" in before, c["source"][:2]
+        assert re.search(r"^#{2,3} ", before, re.MULTILINE), c["source"][:2]
+        assert "Longer version:" not in before, c["source"][:2]
         assert "#" in "".join(c["source"]), "each line a member fills carries a comment"
     handins = [i for i, c in enumerate(cells) if "handin" in c["metadata"]["tags"]]
     assert handins and all("**SAVE YOUR HAND-IN:" in "".join(cells[i - 1]["source"]) for i in handins)

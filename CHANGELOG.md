@@ -1,6 +1,22 @@
 # Changelog
 
 ## Unreleased
+- The teaching that left the Morning Star steps (tickets v1) now lives in the notebooks. Notebook 01
+  carries the bootcamp's three NMR steps in order: a new Part 0 reads glycine and explains what NMR
+  measures, splitting, solvent shifts and fading peaks; a new Part 1 judges alanine over a month
+  (part `alanine-verdict`); Ala-Ala becomes Parts 2 to 5, with a What to look at in Gly-Gly cell,
+  the full match rule and both candidate products in the decision, and the alaninamide overlay
+  (now with alanine beside it) before the decision. Notebook 02 gains the stuck notes, the acid
+  shifts, and Look at every time point. Notebook 03 gains the worked case (asparagine in 81% acid
+  against aspartic acid), a carbon check of asparagine in 98% acid, and Part 5, the Extra on serine
+  against O-sulfoserine (part `serine-verdict`). Notebook 04 gains the step's thresholds and Your
+  own code (optional); notebook 05 the mechanism and Read the mechanism paper. Steps are named by
+  title, never by number, and the "Longer version" lines are gone.
+- `docs/triage-score-sheet.md` and `docs/working-in-nmrium.md`.
+- O-sulfoserine in 98% acid (`OSulfLSer`, 1H and 13C) is in the 8381013 manifest.
+- `nt.load_series` takes the names the steps use ("glycine", "98%") as well as the dataset codes.
+- `nt.record.saved` and `nt.record.write_down` return None, so a cell can end with one without a `;`.
+- `nt.record.saved` says "Not saved yet" for an empty list or string, not "Saved".
 - Tooling brought up to date; nothing the notebooks print or save changes. Python 3.11 to 3.15 (3.10 is end of
   life). uv for everything, with a committed `uv.lock`; the package builds with hatchling.
 - ruff lints and formats the package, scripts, tests and notebooks; prek runs the git hooks
