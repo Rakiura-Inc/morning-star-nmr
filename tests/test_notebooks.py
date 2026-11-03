@@ -68,11 +68,11 @@ def _visible(text):
 
 
 # Visible words a notebook may hold. The steps on Rakiura are short tickets (tickets v1), so the
-# teaching they used to carry lives here: about 2,700 words for one step, more where a notebook
-# carries several. Notebook 01 carries the bootcamp's three NMR steps; notebook 03 a project step
-# and the serine Extra.
-MAX_VISIBLE_WORDS = {"01": 4500, "03": 3200}
-MAX_VISIBLE_WORDS_ONE_STEP = 2700
+# teaching they used to carry lives here. Each cap sits about 5 to 10% above the notebook's size
+# when tickets v1 landed (01: 4,103; 02: 2,548; 03: 2,815; 04: 1,381; 05: 1,535), so new text has
+# to replace old text rather than pile on. Notebook 01 carries the bootcamp's three NMR steps;
+# notebook 03 a project step and the serine Extra.
+MAX_VISIBLE_WORDS = {"01": 4300, "02": 2700, "03": 3000, "04": 1500, "05": 1700}
 
 
 def test_markdown_stays_short():
@@ -81,7 +81,7 @@ def test_markdown_stays_short():
         words = sum(
             len(_visible("".join(c["source"])).split()) for c in _nb(path)["cells"] if c["cell_type"] == "markdown"
         )
-        limit = MAX_VISIBLE_WORDS.get(path.name[:2], MAX_VISIBLE_WORDS_ONE_STEP)
+        limit = MAX_VISIBLE_WORDS[path.name[:2]]
         assert words <= limit, (path.name, words, limit)
 
 

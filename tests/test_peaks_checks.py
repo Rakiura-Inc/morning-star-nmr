@@ -326,3 +326,10 @@ def test_line_differences_find_the_largest_shift():
     assert nt.checks.line_feedback(d).kind == "agrees"
     far = nt.peaks.line_differences(synthetic([(p + 0.05, h) for p, h in AA_1DAY]), inst)
     assert nt.checks.line_feedback(far).kind == "look again"
+
+
+def test_saved_says_an_empty_answer_is_not_saved_yet(capsys):
+    nt.record.saved("ALA_PEAKS_PPM", [], "the peaks your call on alanine rests on")
+    assert capsys.readouterr().out.startswith("Not saved yet ALA_PEAKS_PPM = []")
+    nt.record.saved("ALA_PEAKS_PPM", [1.98, 4.62], "the peaks your call on alanine rests on")
+    assert capsys.readouterr().out.startswith("Saved ALA_PEAKS_PPM = [1.98, 4.62]")

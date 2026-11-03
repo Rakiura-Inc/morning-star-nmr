@@ -390,5 +390,7 @@ def saved(name: str, value, what: str) -> None:
     """One-line confirmation for a setting the member chose (not a verdict field)."""
     if value is ... or value is None:
         _confirm(name, value, False, f"{what}. The cell uses a stand-in until you fill it in.")
+    elif isinstance(value, (list, str)) and not value:
+        _confirm(name, value, False, f"{what}. Still empty: fill it in above.")
     else:
         _confirm(name, value, True, f"{what}.")

@@ -16,6 +16,7 @@
 - O-sulfoserine in 98% acid (`OSulfLSer`, 1H and 13C) is in the 8381013 manifest.
 - `nt.load_series` takes the names the steps use ("glycine", "98%") as well as the dataset codes.
 - `nt.record.saved` and `nt.record.write_down` return None, so a cell can end with one without a `;`.
+- `nt.record.saved` says "Not saved yet" for an empty list or string, not "Saved".
 - Tooling brought up to date; nothing the notebooks print or save changes. Python 3.11 to 3.15 (3.10 is end of
   life). uv for everything, with a committed `uv.lock`; the package builds with hatchling.
 - ruff lints and formats the package, scripts, tests and notebooks; prek runs the git hooks
