@@ -222,7 +222,7 @@ def test_format_messages_are_friendly_and_never_block():
 
 
 def test_write_down_confirms_by_name(capsys):
-    nt.record.write_down("AA_LOST_PPM", [2.08, 4.94], "Ala-Ala", "lost_ppm", suggestion=[5.17, 2.08])
+    assert nt.record.write_down("AA_LOST_PPM", [2.08, 4.94], "Ala-Ala", "lost_ppm", suggestion=[5.17, 2.08]) is None
     out = capsys.readouterr().out
     assert out.startswith("Saved AA_LOST_PPM = [2.08, 4.94]: 2 lost peaks for Ala-Ala, at 2.08 and 4.94 ppm.")
     assert "also listed 5.17" in out

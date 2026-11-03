@@ -17,8 +17,28 @@ from .helpers import AA_1DAY, FIXTURES, ROOT
 
 
 def test_manifests_cover_the_three_records():
-    for rec, n in (("11223995", 398), ("8381013", 160), ("11122291", 12)):
+    for rec, n in (("11223995", 398), ("8381013", 162), ("11122291", 12)):
         assert len(nt.data.manifest(rec)["members"]) == n
+
+
+def test_o_sulfoserine_is_listed_for_the_serine_extra():
+    rows = nt.data.select("8381013", "OSulfLSer", "K", "1H")
+    assert [r["name"] for r in rows] == ["SZSSea-OSulfLSer-K-1Day-1H-09062023_1.zip"]
+    assert rows[0]["time_group"] == "1day"
+
+
+def test_load_series_takes_the_steps_words(monkeypatch):
+    asked = {}
+
+    def fake_fetch(record, sample, acid, nucleus, times, quiet=False):
+        asked.update(sample=sample, acid=acid)
+        return []
+
+    monkeypatch.setattr(nt.data, "fetch", fake_fetch)
+    nt.load_series("8381013", "O-sulfoserine", acid="98%")
+    assert asked == {"sample": "OSulfLSer", "acid": "K"}
+    nt.load_series("8381013", "GLY", acid="H")
+    assert asked == {"sample": "GLY", "acid": "H"}
 
 
 def test_select_returns_time_order_not_name_order():

@@ -2401,6 +2401,36 @@
 "size": 462795,
 "time": "1month",
 "time_group": "1month"
+},
+{
+"acid": "K",
+"compress_size": 463888,
+"compress_type": 0,
+"crc": 2176352745,
+"name": "SZSSea-OSulfLSer-K-1Day-13C-09062023_1.zip",
+"nucleus": "13C",
+"offset": 272671397,
+"path": "Suppl. Dataset S1 AA 1D NMR/sulfSer-oxMet-oxCys-sulfCys 1H and 13C 98 1day original data/SZSSea-OSulfLSer-K-1Day-13C-09062023_1.zip",
+"repeat": false,
+"sample": "OSulfLSer",
+"size": 463888,
+"time": "1day",
+"time_group": "1day"
+},
+{
+"acid": "K",
+"compress_size": 468739,
+"compress_type": 0,
+"crc": 243019803,
+"name": "SZSSea-OSulfLSer-K-1Day-1H-09062023_1.zip",
+"nucleus": "1H",
+"offset": 273135446,
+"path": "Suppl. Dataset S1 AA 1D NMR/sulfSer-oxMet-oxCys-sulfCys 1H and 13C 98 1day original data/SZSSea-OSulfLSer-K-1Day-1H-09062023_1.zip",
+"repeat": false,
+"sample": "OSulfLSer",
+"size": 468739,
+"time": "1day",
+"time_group": "1day"
 }
 ],
 "record": "8381013"

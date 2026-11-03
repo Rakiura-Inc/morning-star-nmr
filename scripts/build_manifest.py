@@ -33,6 +33,10 @@ _REPEAT_OF = {"4MonthR": "4Month"}
 _AA_FOLDER = re.compile(r"aa 1H(?: and 13C)? (81|98) (1day|1week|1month) original data$")
 _AA_NAME = re.compile(r"SZSSea-([A-Z]{3})-(?:H-)?(?:(\d+day|1month)-)?D2SO?4?lock-(1H|13C|13H)-")
 _ACID = {"98": "K", "81": "H"}
+# O-sulfoserine, the reference compound for serine in 98% acid, sits in the folder of modified
+# amino acids. Only its 98% (K) files are used; the A files are in heavy water.
+_MODIFIED_FOLDER = "sulfSer-oxMet-oxCys-sulfCys 1H and 13C 98 1day original data"
+_O_SULFOSERINE_NAME = re.compile(r"SZSSea-(OSulfLSer)-K-1Day-(1H|13C)-")
 
 # 11122291: the mechanism study; dataset S5 is not used by the notebooks.
 _MECHANISM_NAME = re.compile(r"SZSSea-(AA\+A|AA|LAlaninamide|LGlycinamide)-(?:([HK])-)?(?:(1Week)-)?(1H|13C)-")
@@ -51,9 +55,14 @@ def _parse_dipeptide(name: str, _folder: str) -> dict | None:
 
 
 def _parse_amino_acid(name: str, folder: str) -> dict | None:
+    if folder.endswith(_MODIFIED_FOLDER):
+        m = _O_SULFOSERINE_NAME.match(name)
+        if not m:
+            return None
+        return _fields(m.group(1), "K", "1day", "1day", m.group(2))
     fm = _AA_FOLDER.search(folder)
     if not fm:
-        return None  # contaminant tests and modified amino acids: not used by the notebooks
+        return None  # contaminant tests and the other modified amino acids: not used by the notebooks
     acid, group = _ACID[fm.group(1)], fm.group(2)
     m = _AA_NAME.match(name)
     if not m:

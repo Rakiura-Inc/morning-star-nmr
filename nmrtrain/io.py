@@ -66,10 +66,16 @@ NAMES = {
     "TRP": "tryptophan",
     "TYR": "tyrosine",
     "VAL": "valine",
+    "OSulfLSer": "O-sulfoserine",
     "LAlaninamide": "L-alaninamide",
     "LGlycinamide": "L-glycinamide",
     "AA+A": "Ala-Ala + alanine",
 }
+
+
+# The steps say "glycine" and "98% acid"; the file names say GLY and K. `load_series` takes either.
+SAMPLE_CODES = {name: code for code, name in NAMES.items()}
+ACID_CODES = {pct: code for code, pct in ACID_PCT.items()}
 
 
 def time_label(t: str) -> str:
@@ -208,5 +214,11 @@ def load_fid(zip_path: str) -> tuple[dict, np.ndarray, Spectrum]:
 def load_series(
     record: str, sample: str, acid: str | None = "K", nucleus: str = "1H", times="all", quiet: bool = False
 ) -> list[Spectrum]:
-    """Fetch and load one sample's time series (instrument-processed), first time point first."""
+    """Fetch and load one sample's time series (instrument-processed), first time point first.
+
+    sample: the dataset's code ("GLY") or the name the steps use ("glycine").
+    acid: "K" or "98%", "H" or "81%"; None for both.
+    """
+    sample = SAMPLE_CODES.get(sample, sample)
+    acid = ACID_CODES.get(acid, acid)
     return [load_processed(p) for p in _data.fetch(record, sample, acid, nucleus, times, quiet=quiet)]

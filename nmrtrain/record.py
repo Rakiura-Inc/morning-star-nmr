@@ -325,19 +325,18 @@ def _write_down_text(name: str, value, who: str, field: str) -> None:
     _confirm(name, value, True, f"{words} for {who}." if field != "note" else f"your note for {who}.")
 
 
-def write_down(name: str, value, who: str, field: str, suggestion: list | None = None):
+def write_down(name: str, value, who: str, field: str, suggestion: list | None = None) -> None:
     """Record one field of a verdict and say in one line what was saved, by its variable name.
 
     field: "lost_ppm", "new_ppm", "kept_ppm", "left", "call", "confidence", "harsher", "product_guess"
     or "note".
     suggestion: for a ppm list, what the peak picker found; it is shown to compare with, never copied
-    into the answer. Returns the value unchanged.
+    into the answer. Returns None, so a cell that ends with it prints only the confirmation.
     """
     if field in _LIST_WORDS:
         _write_down_list(name, value, who, field, suggestion)
     else:
         _write_down_text(name, value, who, field)
-    return value
 
 
 _TABLE_COLUMNS = [
@@ -387,10 +386,9 @@ def build_verdict(
     return verdict
 
 
-def saved(name: str, value, what: str):
-    """One-line confirmation for a setting the member chose (not a verdict field). Returns the value."""
+def saved(name: str, value, what: str) -> None:
+    """One-line confirmation for a setting the member chose (not a verdict field)."""
     if value is ... or value is None:
         _confirm(name, value, False, f"{what}. The cell uses a stand-in until you fill it in.")
     else:
         _confirm(name, value, True, f"{what}.")
-    return value
