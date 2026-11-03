@@ -27,7 +27,7 @@ def test_offline_mode_logs_and_saves_files(tmp_path, capsys):
     assert nt.portal.connect("notebooks/01_capstone_ala_ala_vs_gly_gly.ipynb") == "offline"
     nt.record.predict("q", {"a": 1})
     assert nt.record.revealed("q")
-    rec = nt.record.handin(
+    nt.record.handin(
         "capstone-verdict",
         figures={"stack": _fig()},
         verdict={"AA": {"call": "unsure"}},
@@ -41,7 +41,7 @@ def test_offline_mode_logs_and_saves_files(tmp_path, capsys):
     assert saved["predicted_before_reveal"] is True and saved["traps_flagged"] == 2
     log = json.loads(Path(nt.portal.state.handin_dir, "rakiura_progress.json").read_text())
     assert log[0]["part"] == "capstone-verdict" and log[0]["numbers"]["AA_call"] == "unsure"
-    assert rec["ppm_scale"].startswith("instrument")
+    assert saved["ppm_scale"].startswith("instrument")
     assert nt.portal.submit() is False  # offline mode never sends anything
 
 
@@ -336,3 +336,12 @@ def test_steps_per_part_and_the_older_per_notebook_format(tmp_path, monkeypatch)
     assert nt.portal.steps(nb, "capstone-verdict")["step"] == "ONB-102-D7"
     monkeypatch.setenv("RAKIURA_STEP", "ONB-102-D9")
     assert nt.portal.steps(nb, "capstone-verdict")["step"] == "ONB-102-D9"
+
+
+def test_a_figure_part_ticked_without_its_figure_says_so(capsys):
+    nt.portal.connect("notebooks/04_process_raw_fids.ipynb")
+    capsys.readouterr()
+    nt.portal.done("raw-overlay")
+    assert capsys.readouterr().out.startswith("Progress saved, without the overlay")
+    nt.portal.done("raw-overlay", figures=[_fig()])
+    assert capsys.readouterr().out.startswith("Overlay saved")

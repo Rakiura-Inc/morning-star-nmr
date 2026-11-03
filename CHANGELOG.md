@@ -24,7 +24,10 @@
   `nt.peaks` (the trap checks keep their own copy, tested against the notebooks'). The sample names
   moved to `nmrtrain/samples.csv`. `Spectrum.y` is `Spectrum.intensity`, `Spectrum.sf` is
   `Spectrum.spectrometer_mhz`. Check results are plain lists shown with `nt.checks.show`;
-  `nt.portal.done` and `nt.record.save_rows` return None. No part id or answer name changed.
+  `nt.portal.done`, `nt.record.save_rows` and `nt.record.handin` return None. No part id or
+  answer name changed. A figure part ticked without its figure says so ("Progress saved,
+  without the overlay"), and the line-width trap check returns 0 Hz without a scipy warning
+  when the peak has gone from its window.
 - ruff enforces the engineering gate's limits (complexity 10, at most 6 arguments, 4 positional,
   named numbers in comparisons); notebooks are linted at 100 characters a line;
   `scripts/check_cells.py` runs as a git hook and in CI.

@@ -84,10 +84,15 @@ def compare_peaks(first_ppm: list[float], last_ppm: list[float], tolerance_ppm: 
 
 
 def linewidth_hz(spectrum: Spectrum, near_ppm: float, half_window_ppm: float = 0.06) -> float:
-    """Full width at half height, in Hz, of the tallest point within near_ppm +/- half_window_ppm."""
+    """Full width at half height, in Hz, of the tallest point within near_ppm +/- half_window_ppm.
+
+    0.0 when that point is the window's first or last: then the window holds no peak (it has
+    gone, as Phe-Phe's 3.57 ppm peak has by 4 months in 81% acid), only the slope of another."""
     inside = (spectrum.ppm > near_ppm - half_window_ppm) & (spectrum.ppm < near_ppm + half_window_ppm)
     ppm, intensity = spectrum.ppm[inside], spectrum.intensity[inside]
     top = int(np.argmax(intensity))
+    if top in (0, intensity.size - 1):
+        return 0.0
     widths_in_points = peak_widths(intensity, [top], rel_height=0.5)[0]
     ppm_per_point = abs(ppm[1] - ppm[0])
     return float(widths_in_points[0] * ppm_per_point * spectrum.spectrometer_mhz)

@@ -126,11 +126,12 @@ def handin(  # noqa: PLR0913 (one argument for each thing a hand-in holds)
     question: str | None = None,
     traps: int = 0,
     processing: str = "pdata",
-) -> dict:
+) -> None:
     """Save the figures (PNG) and the verdict (JSON) in handin/, then tick the part on Rakiura.
 
     figures: {"file_stem": fig}. numbers: at most 20 single values for the step.
-    Nothing is submitted: run nt.portal.submit() yourself when you are ready.
+    Nothing is submitted: run nt.portal.submit() yourself when you are ready. Returns None, so a
+    cell can end with it; the printed list says what was saved, and verdict.json holds it all.
     """
     out = Path(portal.state.handin_dir, part)
     out.mkdir(parents=True, exist_ok=True)
@@ -166,7 +167,6 @@ def handin(  # noqa: PLR0913 (one argument for each thing a hand-in holds)
             "Offline mode: attach these files on your step page. "
             "When you are connected to Rakiura, they are added for you."
         )
-    return record
 
 
 def fill(value, default, name: str):

@@ -276,3 +276,12 @@ def test_matches_published_for_the_results_table():
     assert nt.checks.matches_published({"call": "survives"}, case) == "no"
     assert nt.checks.matches_published({"call": ""}, case) == "unsure"
     assert nt.checks.matches_published({"call": "survives"}, {"call": None}) == "unsure"
+
+
+def test_line_width_where_the_peak_has_gone_is_zero_without_a_scipy_warning():
+    import warnings
+
+    slope_only = synthetic([(2.0, 1.0)])  # nothing near 2.1 ppm but the side of the 2.0 ppm peak
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        assert nt.peaks.linewidth_hz(slope_only, 2.1) == 0.0

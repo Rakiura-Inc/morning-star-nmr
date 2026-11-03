@@ -266,7 +266,7 @@ def done(part: str, figures: list | None = None, numbers: dict | None = None) ->
         state.helper.done(part, figures=figures or None, numbers=clean or None)
         return
     _offline_log({"part": part, "figures": len(figures), "numbers": clean})
-    print(f"{saved_words(part)} (offline mode: kept on this computer).")
+    print(f"{saved_words(part, has_figures=bool(figures))} (offline mode: kept on this computer).")
 
 
 # What a member reads when a part is ticked. The part name itself stays internal (the portal keys on it).
@@ -277,11 +277,16 @@ _SAVED = {
     "verdict": "Hand-in saved",
     "overlay": "Overlay saved",
 }
+# Parts named for their figure; ticked without it, they say what is missing.
+_FIGURE_NAMES = {"stack": "stacked plot", "compare": "comparison", "overlay": "overlay"}
 
 
-def saved_words(part: str) -> str:
+def saved_words(part: str, has_figures: bool = True) -> str:
     """What a member reads when a part is ticked, from the part name's last word."""
-    return _SAVED.get(part.rsplit("-", 1)[-1], "Progress saved")
+    last_word = part.rsplit("-", 1)[-1]
+    if not has_figures and last_word in _FIGURE_NAMES:
+        return f"Progress saved, without the {_FIGURE_NAMES[last_word]}"
+    return _SAVED.get(last_word, "Progress saved")
 
 
 def stage_file(text: str, title: str, mime: str = "text/plain", part: str | None = None) -> bool:
