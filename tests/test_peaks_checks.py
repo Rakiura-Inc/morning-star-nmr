@@ -1,11 +1,13 @@
 """Peak picking, trap checks and feedback on synthetic spectra."""
+
 import datetime as dt
 import re
 
 import pytest
 
 import nmrtrain as nt
-from conftest import synthetic
+
+from .helpers import synthetic
 
 # Made-up spectra (not readings of the real data): a first and a last time point.
 AA_1DAY = [(5.30, 0.5), (4.70, 0.5), (2.285, 1.0), (2.267, 1.0), (1.791, 1.0), (1.773, 1.0)]
@@ -69,7 +71,7 @@ def test_normalisation_trap():
 def test_broad_early_note():
     early = synthetic(AA_1DAY, width=0.012)
     later = [synthetic(AA_1DAY, time=t) for t in ("3day", "8day")]
-    assert nt.checks.check_broad_early([early] + later).kind == "note"
+    assert nt.checks.check_broad_early([early, *later]).kind == "note"
 
 
 def test_signal_loss_without_new_peaks_suggests_precipitation():
@@ -83,16 +85,27 @@ KEY = nt.answers.load("capstone", quiet=True)
 
 # A synthetic key case (made-up molecule and shifts), so the signal-level feedback is tested without
 # shipping any reading of the real spectra.
-SYNTH = {"sample": "XX", "acid": "K", "call": "degrades", "call_source": "a test source", "tolerance_ppm": 0.05,
-         "signals": [{"ppm": 3.10, "group": "lost", "what": "a test methyl",
-                      "if_listed_as": {"kept": "the 3.10 test methyl is the one that goes."}},
-                     {"ppm": 4.20, "group": "new", "what": "a new test peak"},
-                     {"ppm": 2.50, "group": "kept", "what": "a kept test peak", "backbone": True},
-                     {"ppm": 6.00, "group": "new", "what": "a small test peak", "optional": True}],
-         "expect": {"1day": {"present": [3.10, 2.50], "absent": []},
-                    "4Month": {"present": [4.20, 2.50], "absent": [3.10]}}}
+SYNTH = {
+    "sample": "XX",
+    "acid": "K",
+    "call": "degrades",
+    "call_source": "a test source",
+    "tolerance_ppm": 0.05,
+    "signals": [
+        {
+            "ppm": 3.10,
+            "group": "lost",
+            "what": "a test methyl",
+            "if_listed_as": {"kept": "the 3.10 test methyl is the one that goes."},
+        },
+        {"ppm": 4.20, "group": "new", "what": "a new test peak"},
+        {"ppm": 2.50, "group": "kept", "what": "a kept test peak", "backbone": True},
+        {"ppm": 6.00, "group": "new", "what": "a small test peak", "optional": True},
+    ],
+    "expect": {"1day": {"present": [3.10, 2.50], "absent": []}, "4Month": {"present": [4.20, 2.50], "absent": [3.10]}},
+}
 DIPEPTIDE_TABLES = "Check your decision against Table 1 (81%) and Table 2 (98%) of the paper"
-GRADING = re.compile(r"\b(correct|incorrect|wrong|score|points|grade)\b|\d%", re.I)
+GRADING = re.compile(r"\b(correct|incorrect|wrong|score|points|grade)\b|\d%", re.IGNORECASE)
 
 
 def test_unsure_is_always_a_fair_answer():
@@ -108,8 +121,9 @@ def test_published_call_is_compared_with_its_source():
 
 
 def test_slips_get_targeted_feedback():
-    rep = nt.checks.check_verdict({"call": "degrades", "lost_ppm": [11.43, 7.0], "new_ppm": [7.80], "kept_ppm": [3.10]},
-                                  SYNTH, sample="XX")
+    rep = nt.checks.check_verdict(
+        {"call": "degrades", "lost_ppm": [11.43, 7.0], "new_ppm": [7.80], "kept_ppm": [3.10]}, SYNTH, sample="XX"
+    )
     text = "\n".join(map(str, rep))
     assert "acid's own signal" in text
     assert "mirror image 4.20" in text
@@ -119,8 +133,9 @@ def test_slips_get_targeted_feedback():
 
 
 def test_cited_values_with_no_key_signals_are_left_for_the_reviewer():
-    rep = nt.checks.check_verdict({"call": "degrades", "lost_ppm": [11.43, 2.0], "new_ppm": [5.0]},
-                                  nt.answers.case(KEY, "AA"))
+    rep = nt.checks.check_verdict(
+        {"call": "degrades", "lost_ppm": [11.43, 2.0], "new_ppm": [5.0]}, nt.answers.case(KEY, "AA")
+    )
     text = "\n".join(map(str, rep))
     assert "acid's own signal" in text
     assert "no signal in the key" not in text and "could also cite" not in text
@@ -135,11 +150,16 @@ def test_peak_list_check_on_a_synthetic_key():
 
 
 def test_feedback_never_grades():
-    cases = [nt.answers.case(KEY, "AA"), SYNTH,
-             nt.answers.case(nt.answers.load("dipeptides", quiet=True), "LL-H"),
-             nt.answers.case(nt.answers.load("amino_acids", quiet=True), "ASN-H")]
-    verdicts = [{"call": c, "lost_ppm": [1.0, 3.10], "product_guess": "x", "confidence": "high"}
-                for c in ("survives", "degrades", "unsure", "")]
+    cases = [
+        nt.answers.case(KEY, "AA"),
+        SYNTH,
+        nt.answers.case(nt.answers.load("dipeptides", quiet=True), "LL-H"),
+        nt.answers.case(nt.answers.load("amino_acids", quiet=True), "ASN-H"),
+    ]
+    verdicts = [
+        {"call": c, "lost_ppm": [1.0, 3.10], "product_guess": "x", "confidence": "high"}
+        for c in ("survives", "degrades", "unsure", "")
+    ]
     for case in cases:
         for v in verdicts:
             for f in nt.checks.check_verdict(v, case):
@@ -154,8 +174,14 @@ def test_prediction_feedback_mentions_water():
 def test_prediction_is_judged_on_typical_ranges_not_on_this_dataset():
     # The founder's run: a prediction is made before the spectrum is seen, so the feedback gives the
     # typical position taught above and sends the member to the spectrum, never this dataset's range.
-    pred = {"AA_signals": 1, "AA_methyl_ppm": 2.0, "AA_alpha_ppm": 3.0, "GG_signals": 4, "GG_ch2_ppm": 5.0,
-            "breaks_down": "Gly-Gly"}
+    pred = {
+        "AA_signals": 1,
+        "AA_methyl_ppm": 2.0,
+        "AA_alpha_ppm": 3.0,
+        "GG_signals": 4,
+        "GG_ch2_ppm": 5.0,
+        "breaks_down": "Gly-Gly",
+    }
     rep = nt.checks.check_prediction(pred, KEY["prediction"])
     text = "\n".join(map(str, rep))
     assert "[" not in text and "residue" not in text and "alpha-H" not in text
@@ -189,8 +215,10 @@ def test_format_messages_are_friendly_and_never_block():
     assert probs[0].startswith('The decision for Ala-Ala is "broken": write one of "survives", "breaks down"')
     assert "without quotes" in probs[1]
     notes = nt.checks.verdict_notes({"AA": {"call": "", "lost_ppm": [], "kept_ppm": [2.0]}}, ["AA"], {"AA": "Ala-Ala"})
-    assert notes == ['Ala-Ala: still empty: decision, lost peaks. An empty peak list is fine if there were none, '
-                     'and "unsure" is a fair answer.']
+    assert notes == [
+        "Ala-Ala: still empty: decision, lost peaks. An empty peak list is fine if there were none, "
+        'and "unsure" is a fair answer.'
+    ]
 
 
 def test_write_down_confirms_by_name(capsys):
@@ -207,8 +235,12 @@ def test_write_down_confirms_by_name(capsys):
 
 
 def test_build_verdict_keeps_the_hand_in_format(capsys):
-    v = nt.record.build_verdict({"AA": {"call": "unsure", "lost_ppm": [1.99]}}, names={"AA": "Ala-Ala"},
-                                examples={"Gly-Gly (example)": {"call": "survives"}}, note="n")
+    v = nt.record.build_verdict(
+        {"AA": {"call": "unsure", "lost_ppm": [1.99]}},
+        names={"AA": "Ala-Ala"},
+        examples={"Gly-Gly (example)": {"call": "survives"}},
+        note="n",
+    )
     assert v == {"AA": {"call": "unsure", "lost_ppm": [1.99]}, "note": "n"}
     out = capsys.readouterr().out
     assert "| **Gly-Gly (example)** | survives |" in out and "| **Ala-Ala** | unsure | 1.99 |" in out
@@ -251,7 +283,9 @@ def test_a_case_with_no_key_points_to_the_paper_tables(capsys):
         assert rep[0].kind == "open" and DIPEPTIDE_TABLES in rep[0].text
     amino = nt.answers.load("amino_acids")
     assert "Table 1 of the paper (M. D. Seager et al. 2024, Astrobiology 24, 386)" in capsys.readouterr().out
-    rep = nt.checks.check_verdict({"call": "side chain modified", "product_guess": "x"}, nt.answers.case(amino, "ASN-H"))
+    rep = nt.checks.check_verdict(
+        {"call": "side chain modified", "product_guess": "x"}, nt.answers.case(amino, "ASN-H")
+    )
     assert "Astrobiology 24, 386" in rep[0].text and rep[0].kind == "open"
     assert all(f.kind in ("open", "to do", "note") for f in rep)
 
@@ -263,7 +297,13 @@ def test_how_much_is_left_is_measured_against_the_acid_peak():
     left = nt.peaks.left_of_first([first, half, gone], (1.75, 1.81))
     assert left[0] == 1.0 and abs(left[1] - 0.5) < 0.02 and abs(left[2] - 0.1) < 0.02
     assert [nt.peaks.left_band(x) for x in (1.5, 1.0, 0.5, 0.34, 0.33, 0.0)] == [
-        "no clear loss", "no clear loss", "no clear loss", "no clear loss", "little or none", "little or none"]
+        "no clear loss",
+        "no clear loss",
+        "no clear loss",
+        "no clear loss",
+        "little or none",
+        "little or none",
+    ]
     assert nt.checks.LEFT == ("little or none", "no clear loss", "unsure")
 
 

@@ -9,6 +9,10 @@ notebooks: what to compare, what the peaks say, and the verdict.
 > Gly-Gly in 98% acid). For every other case, members check their call against the paper's
 > tables. There is no PyPI package; the notebooks install `nmrtrain` from this repository.
 
+**Why it is a package.** Each notebook's setup cell runs `pip install` on this repository (see
+Colab below), so `nmrtrain` is built as a normal Python package (hatchling) and installs anywhere
+pip does. It supports Python 3.11 to 3.15; Colab currently runs 3.13.
+
 ## The notebooks
 
 | # | Notebook | Where it is used | Time | Open in Colab |
@@ -41,29 +45,33 @@ sees it, with the traps firing.
 
 ## Try it locally
 
+You need [uv](https://docs.astral.sh/uv/getting-started/installation/). It installs the right
+Python, the locked dependencies (`uv.lock`) and the Rakiura helper.
+
 ```sh
 git clone https://github.com/Rakiura-Inc/morning-star-nmr.git
 cd morning-star-nmr
-make local          # creates .venv, installs nmrtrain (editable) and the Rakiura helper, opens Jupyter Lab
+make local          # uv sync, then opens Jupyter Lab on the notebooks
 ```
 
 `make local` installs the Rakiura notebook helper from
-[Rakiura-Inc/rakiura-py](https://github.com/Rakiura-Inc/rakiura-py) (use a local checkout with
-`make local RAKIURA_HELPER=/path/to/rakiura-py`). If it cannot be installed, the notebooks run in
-offline mode. Other targets:
+[Rakiura-Inc/rakiura-py](https://github.com/Rakiura-Inc/rakiura-py), at the commit in `uv.lock`.
+To try a local checkout of the helper instead, run
+`uv run --with /path/to/rakiura-py jupyter lab notebooks`. Without the helper (or without a key),
+the notebooks run in offline mode. Other targets:
 
 ```sh
-make test           # pytest (about 10 s; no network)
+make test           # pytest, in parallel and in random order (about 10 s; no network)
+make lint           # ruff on the package, scripts, tests and notebooks
+make hooks          # every git hook CI runs (uvx prek run --all-files)
 make run            # execute all five notebooks headless into notebooks/executed/ (blank answers)
 ```
 
-Without make:
+Without make, the same commands are `uv sync`, `uv run pytest`, `uv run ruff check .` and
+`uv run scripts/run_notebooks.py`. To run the hooks on every commit: `uvx prek install`.
 
-```sh
-python3 -m venv .venv && .venv/bin/pip install -e ".[dev,notebooks,explore]"
-.venv/bin/pip install "rakiura @ git+https://github.com/Rakiura-Inc/rakiura-py@main"   # optional: the Rakiura helper
-.venv/bin/jupyter lab notebooks
-```
+Dependencies are kept current by Renovate (`renovate.json5`): it opens pull requests for new
+releases and refreshes `uv.lock` weekly.
 
 **Data.** The first run of each notebook downloads only the spectra it needs (2 to 5 MB) from
 Zenodo: one partial download per spectrum, at most about two requests a second, each checked
@@ -149,7 +157,7 @@ check it against Table 1 of M. D. Seager et al. 2024, *Astrobiology* 24, 386. It
 **Spectra are never re-referenced to the acid peak by default.** That peak drifts (about 0.07 ppm
 over four months, in Ala-Ala and in Gly-Gly alike), and aligning on it distorts every comparison. Keep the instrument's ppm scale.
 
-The keys and their sources: [`answer_keys/README.md`](answer_keys/README.md).
+The keys and their sources: [`nmrtrain/answer_keys/README.md`](nmrtrain/answer_keys/README.md).
 
 ## Shared results table
 
@@ -191,7 +199,7 @@ From the repository folder:
 ```sh
 gh repo create Rakiura-Inc/morning-star-nmr --public --source . --push
 # optional: pin the notebooks' install line to the pushed commit, then push again
-python scripts/set_repo.py Rakiura-Inc/morning-star-nmr --pin "$(git rev-parse HEAD)"
+uv run scripts/set_repo.py Rakiura-Inc/morning-star-nmr --pin "$(git rev-parse HEAD)"
 git commit -am "Pin notebooks to the package commit" && git push
 ```
 
@@ -201,10 +209,10 @@ links, install lines, `CITATION.cff`, `nmrtrain/portal.py`, `nmrtrain/data.py`) 
 ## Layout
 
 ```
-nmrtrain/        data (Zenodo fetch, manifests/), io, process, peaks, plot, checks, answers, record, portal
+nmrtrain/        data (Zenodo fetch, records.json, manifests/), io, process, peaks, plot, checks, answers,
+                 record, portal; answer_keys/ holds published calls only (JSON)
 notebooks/       01 to 05, rakiura_steps.json, executed/
 data/alanine/    the three alanine practice spectra (CC BY 4.0, Zenodo 8381013)
-answer_keys/     published calls only (JSON), installed as nmrtrain.answer_keys
 replication/     schema.json, replications.csv, update_table.py
 scripts/         build_manifest.py, run_notebooks.py, set_repo.py
 tests/           pytest, with one fixture spectrum

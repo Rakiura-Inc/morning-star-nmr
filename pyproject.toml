@@ -1,38 +1,84 @@
 [build-system]
-requires = ["setuptools>=64"]
-build-backend = "setuptools.build_meta"
+build-backend = "hatchling.build"
+requires = [ "hatchling" ]
 
 [project]
 name = "nmrtrain"
 version = "0.1.0"
-description = "Plumbing for the Morning Star Missions NMR training notebooks: fetch public Zenodo spectra, process, plot, check."
+description = """\
+    Plumbing for the Morning Star Missions NMR training notebooks: fetch public Zenodo spectra, process, plot, check.\
+    """
 readme = "README.md"
-requires-python = ">=3.10"
-license = { text = "MIT" }
-authors = [{ name = "Rakiura" }]
-classifiers = ["License :: OSI Approved :: MIT License"]
+license = "MIT"
+authors = [ { name = "Rakiura" } ]
+requires-python = ">=3.11"
+classifiers = [
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
+]
+# Lower bounds stay low on purpose: Colab already ships numpy, scipy and matplotlib, and the
+# notebooks' setup cell should reuse them rather than upgrade them.
 dependencies = [
-  "numpy>=1.24",
-  "scipy>=1.10",
-  "matplotlib>=3.7",
-  "nmrglue>=0.10",
+    "matplotlib>=3.8,<4",
+    "nmrglue>=0.10,<1",
+    "numpy>=1.26,<3",
+    "scipy>=1.11,<2",
 ]
 
 [project.optional-dependencies]
-explore = ["plotly>=5"]
-notebooks = ["jupyterlab>=4", "ipykernel>=6"]
-dev = ["pytest>=7", "nbclient>=0.9", "nbformat>=5.9", "ipykernel>=6"]
+explore = [ "plotly>=5,<8" ]
 
-[tool.setuptools]
-packages = ["nmrtrain", "nmrtrain.answer_keys"]
+[project.urls]
+Homepage = "https://github.com/Rakiura-Inc/morning-star-nmr"
+Source = "https://github.com/Rakiura-Inc/morning-star-nmr"
+Issues = "https://github.com/Rakiura-Inc/morning-star-nmr/issues"
 
-[tool.setuptools.package-dir]
-"nmrtrain" = "nmrtrain"
-"nmrtrain.answer_keys" = "answer_keys"
+[dependency-groups]
+dev = [
+    # Having ruff in the venv helps with IDE's auto lint/format integrations
+    "ruff==0.17.3",
+    { include-group = "helper" },
+    { include-group = "pytest" },
+    { include-group = "run" },
+]
+# The Rakiura notebook helper, which the notebooks install from GitHub in Colab.
+helper = [
+    "rakiura",
+]
+# Opens the notebooks locally (`make local`).
+notebooks = [
+    "jupyterlab==4.6.5",
+]
+pytest = [
+    "pytest==9.2.0",
+    "pytest-randomly==5.0.0",
+    "pytest-xdist==3.8.0",
+]
+# Executes the notebooks headless (`make run`, the notebooks job in CI).
+run = [
+    "ipykernel==7.4.0",
+    "nbclient==0.11.0",
+    "nbformat==5.11.1",
+]
 
-[tool.setuptools.package-data]
-"nmrtrain" = ["manifests/*.json"]
-"nmrtrain.answer_keys" = ["*.json"]
+[tool.hatch.build.targets.sdist]
+include = [ "nmrtrain", "tests", "CHANGELOG.md", "CITATION.cff" ]
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
+[tool.hatch.build.targets.wheel]
+packages = [ "nmrtrain" ]
+
+[tool.uv]
+# The earliest version that supports the current lock file revision
+required-version = ">=0.8.4"
+
+[tool.uv.sources]
+rakiura = { git = "https://github.com/Rakiura-Inc/rakiura-py", branch = "main" }
+
+[tool.codespell]
+# "ser" is the notebooks' name for a time series of spectra; "Suplementary" is spelled so in the
+# Zenodo archive's own file name.
+ignore-words-list = "ser,suplementary"

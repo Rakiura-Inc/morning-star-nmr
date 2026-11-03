@@ -1,30 +1,104 @@
-name: tests
+# Adapted from https://docs.astral.sh/uv/guides/integration/github/#using-uv-in-github-actions
+
+name: "Tests"
+
 on:
+  workflow_dispatch:
   push:
-  pull_request:
+    branches:
+      - main
+  pull_request: ~
   schedule:
-    - cron: "0 6 * * 1"   # weekly: run every notebook against live Zenodo to catch link rot
+    - cron: "0 6 * * 1"  # weekly: run every notebook against live Zenodo to catch link rot
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  # renovate: datasource=pypi depName=uv
+  UV_VERSION: 0.13.7
+  # The Python of Colab's current runtime (2026.10), where members run the notebooks.
+  NOTEBOOK_PYTHON_VERSION: "3.13"
+
 jobs:
-  tests:
-    runs-on: ubuntu-latest
+  run-tests:
+    name: pytest (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
     strategy:
+      fail-fast: false
       matrix:
-        python: ["3.10", "3.11", "3.12"]
+        python-version:
+          - "3.11"
+          - "3.12"
+          - "3.13"
+          - "3.14"
+          - "3.15"
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
-          python-version: ${{ matrix.python }}
-      - run: pip install -e ".[dev]"
-      - run: pip install "rakiura @ git+https://github.com/Rakiura-Inc/rakiura-py@main"
-      - run: python -m pytest -q
-  notebooks:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+          persist-credentials: false
+
+      - name: Install uv ${{ env.UV_VERSION }} & Python ${{ matrix.python-version }}
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2  # v10.3.3
+        with:
+          enable-cache: true
+          python-version: ${{ matrix.python-version }}
+          version: ${{ env.UV_VERSION }}
+
+      - name: Install Python dependencies
+        run: uv sync --locked
+
+      - name: Run tests
+        run: uv run pytest
+
+      - name: Build package
+        run: uv build
+
+      # Away from the checkout, so the import comes from the wheel, as in Colab.
+      - name: Install built package and verify import works
+        working-directory: ${{ runner.temp }}
+        run: |
+          uv run --isolated --no-project --with "$GITHUB_WORKSPACE"/dist/*.whl \
+            python -c "import nmrtrain; print(nmrtrain.__version__, nmrtrain.answers.available())"
+
+  run-notebooks:
+    name: execute the notebooks
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
-          python-version: "3.12"
-      - run: pip install -e ".[dev]"
-      - run: RAKIURA_LIVE=0 python scripts/run_notebooks.py
+          persist-credentials: false
+
+      - name: Install uv ${{ env.UV_VERSION }} & Python ${{ env.NOTEBOOK_PYTHON_VERSION }}
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2  # v10.3.3
+        with:
+          enable-cache: true
+          python-version: ${{ env.NOTEBOOK_PYTHON_VERSION }}
+          version: ${{ env.UV_VERSION }}
+
+      # The spectra are checked against their CRC whatever their source. The weekly run skips the
+      # cache so it downloads from Zenodo itself.
+      - name: Restore the spectra cache
+        if: github.event_name != 'schedule'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: notebooks/nmr_data
+          key: nmr-data-${{ hashFiles('nmrtrain/manifests/*.json') }}
+
+      - name: Install Python dependencies
+        run: uv sync --locked
+
+      - name: Execute every notebook headless (blank answers, offline mode)
+        run: uv run scripts/run_notebooks.py
+        env:
+          RAKIURA_LIVE: "0"

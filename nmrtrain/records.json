@@ -1,0 +1,46 @@
+{
+  "11223995": {
+    "doi": "10.5281/zenodo.11223995",
+    "file": "Suplementary dataset S1.zip",
+    "size": 187180468,
+    "title": "General Instability of Dipeptides in Concentrated Sulfuric Acid as Relevant for the Venus Cloud Habitability (Supplementary dataset S1)",
+    "authors": "Petkowski, J. J.; Seager, M. D.; Bains, W.; Seager, S.",
+    "year": 2024,
+    "paper": "Petkowski et al. 2024, Scientific Reports 14, 17083, doi:10.1038/s41598-024-67342-w",
+    "time_order": [
+      "1day",
+      "3day",
+      "8day",
+      "5week",
+      "4Month",
+      "4MonthR"
+    ]
+  },
+  "8381013": {
+    "doi": "10.5281/zenodo.8381013",
+    "file": "Suppl. Dataset S1 AA 1D NMR.zip",
+    "size": 274559353,
+    "title": "Stability of Biogenic Amino Acids in Concentrated Sulfuric Acid: Implications for the Habitability of Venus' Clouds (Supplementary dataset S1)",
+    "authors": "Seager, M. D.; Seager, S.; Bains, W.; Petkowski, J. J.",
+    "year": 2023,
+    "paper": "Seager et al. 2024, Astrobiology 24, 386 (ADS 2024AsBio..24..386S)",
+    "time_order": [
+      "1day",
+      "1week",
+      "1month"
+    ]
+  },
+  "11122291": {
+    "doi": "10.5281/zenodo.11122291",
+    "file": "SUPPLEMENTARY DATASETS 1-5.zip",
+    "size": 101517923,
+    "title": "Mechanism for Peptide Bond Solvolysis in 98% w/w Concentrated Sulfuric Acid (Supplementary datasets 1 to 5)",
+    "authors": "Petkowski, J. J.; Seager, M. D.; Bains, W.; Grimes Jr, J. H.; Seager, S.",
+    "year": 2024,
+    "paper": "Petkowski et al. 2024, ACS Omega (peptide bond solvolysis mechanism)",
+    "time_order": [
+      "ref",
+      "1Week"
+    ]
+  }
+}
